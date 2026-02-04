@@ -179,8 +179,8 @@ export default async function SalonManagePage({ params }: { params: Promise<{ id
                   <label className="text-sm font-medium text-muted-foreground">
                     URL zakazivanja
                   </label>
-                  <p className="text-sm text-primary">
-                    {salon.subdomain}.{process.env.NEXT_PUBLIC_BASE_DOMAIN}
+                  <p className="text-sm text-primary break-all">
+                    {process.env.NEXT_PUBLIC_APP_URL || 'https://dragica-web-app.vercel.app'}/book/{salon.slug || salon.subdomain}
                   </p>
                 </div>
               </div>

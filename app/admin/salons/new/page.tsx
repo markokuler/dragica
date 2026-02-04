@@ -118,8 +118,7 @@ export default function NewSalonPage() {
                   disabled={loading}
                 />
                 <p className="text-sm text-muted-foreground">
-                  URL: {formData.subdomain || 'subdomen'}.
-                  {process.env.NEXT_PUBLIC_BASE_DOMAIN || 'dragica.vercel.app'}
+                  URL: {process.env.NEXT_PUBLIC_APP_URL || 'https://dragica-web-app.vercel.app'}/book/{formData.subdomain || 'subdomen'}
                 </p>
               </div>
 

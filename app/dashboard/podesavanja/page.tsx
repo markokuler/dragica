@@ -87,11 +87,11 @@ export default function SettingsPage() {
   }
 
   const bookingUrl = salon
-    ? `${salon.subdomain}.${process.env.NEXT_PUBLIC_BASE_DOMAIN || 'dragica.vercel.app'}`
+    ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://dragica-web-app.vercel.app'}/book/${salon.slug || salon.subdomain}`
     : ''
 
   const handleCopyUrl = () => {
-    navigator.clipboard.writeText(`https://${bookingUrl}`)
+    navigator.clipboard.writeText(bookingUrl)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -223,7 +223,7 @@ export default function SettingsPage() {
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={() => window.open(`https://${bookingUrl}`, '_blank')}
+                  onClick={() => window.open(bookingUrl, '_blank')}
                 >
                   <ExternalLink className="mr-2 h-4 w-4" />
                   Otvori
