@@ -9,7 +9,12 @@ export function middleware(request: NextRequest) {
   const cleanHostname = hostname.split(':')[0]
   const cleanBaseDomain = baseDomain.split(':')[0]
 
-  // Check if this is a subdomain request
+  // Skip subdomain logic for Vercel preview/production URLs
+  if (cleanHostname.includes('vercel.app') || cleanHostname === 'localhost') {
+    return NextResponse.next()
+  }
+
+  // Check if this is a subdomain request (for custom domains)
   const isSubdomain = cleanHostname.includes('.') && cleanHostname !== cleanBaseDomain && !cleanHostname.startsWith('www.')
 
   if (isSubdomain) {
@@ -17,7 +22,7 @@ export function middleware(request: NextRequest) {
 
     // Rewrite to the tenant booking page
     const url = request.nextUrl.clone()
-    url.pathname = `/${subdomain}${url.pathname}`
+    url.pathname = `/book/${subdomain}${url.pathname === '/' ? '' : url.pathname}`
 
     return NextResponse.rewrite(url)
   }
@@ -36,7 +41,8 @@ export const config = {
      * - admin (admin routes)
      * - dashboard (dashboard routes)
      * - login (login page)
+     * - book (booking pages)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|admin|dashboard|login).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|admin|dashboard|login|book).*)',
   ],
 }
