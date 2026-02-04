@@ -1,9 +1,9 @@
 # Dragica - QA Documentation
 
-**Version:** 1.0
+**Version:** 2.0
 **Last Updated:** February 4, 2026
 **Application Type:** Multi-tenant SaaS for Nail Salons
-**Tech Stack:** Next.js 16, Supabase, TypeScript, Tailwind CSS
+**Tech Stack:** Next.js 16, Supabase, TypeScript, Tailwind CSS v4, shadcn/ui
 
 ---
 
@@ -11,17 +11,25 @@
 
 1. [Overview](#overview)
 2. [User Roles](#user-roles)
-3. [Completed Features](#completed-features)
-4. [Planned Features](#planned-features)
+3. [Application Structure](#application-structure)
+4. [Completed Features](#completed-features)
 5. [Test Scenarios](#test-scenarios)
 6. [API Endpoints](#api-endpoints)
 7. [Database Schema](#database-schema)
+8. [Mobile Responsive Testing](#mobile-responsive-testing)
 
 ---
 
 ## Overview
 
 Dragica is a multi-tenant SaaS application designed for nail salons to manage their business operations and allow clients to book appointments online. Each salon (tenant) has isolated data and a customizable public booking page.
+
+**Branding:**
+- Logo text: "Dragica"
+- Slogan: "Tvoja pomoćnica"
+- Theme: Dark grey (#181920) + Gold accent (#CDA661)
+- Font: Poppins
+- Language: Serbian (Latin)
 
 **Production URL:** https://dragica-web-app.vercel.app
 **Repository:** https://github.com/markokuler/dragica
@@ -36,6 +44,28 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 | **Admin** | Platform administrator | `/admin/*` - Manage all salons |
 | **Salon Owner (Client)** | Salon business owner | `/dashboard/*` - Manage own salon |
 | **Public User** | End customer | `/book/[slug]` - Book appointments |
+
+---
+
+## Application Structure
+
+### Dashboard Pages
+```
+/dashboard              - Pregled (Overview)
+/dashboard/kalendar     - Kalendar + Evidencija zakazivanja
+/dashboard/usluge       - Usluge (Services)
+/dashboard/klijenti     - Klijenti (Clients)
+/dashboard/finansije    - Finansije (Finances)
+/dashboard/podesavanja  - Podešavanja (Settings)
+  └── Tab: Opšte        - General settings
+  └── Tab: Radno vreme  - Working hours + Blocked slots
+  └── Tab: Brendiranje  - Branding/customization
+```
+
+### Removed/Merged Pages
+- ~~`/dashboard/zakazivanja`~~ → Merged into `/dashboard/kalendar`
+- ~~`/dashboard/brendiranje`~~ → Merged into `/dashboard/podesavanja` (tab)
+- ~~`/dashboard/kalendar/novo`~~ → Replaced with popup dialog
 
 ---
 
@@ -55,18 +85,6 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 | Activate/Deactivate Salon | Toggle salon status | `/admin` |
 | Delete Salon | Remove salon from system | `/admin` |
 
-**Test Scenarios - Admin Panel:**
-- [ ] Admin can log in with valid credentials
-- [ ] Admin cannot log in with invalid credentials
-- [ ] Admin can view list of all salons
-- [ ] Admin can create a new salon with all required fields
-- [ ] System prevents duplicate email/subdomain when creating salon
-- [ ] Admin can edit existing salon details
-- [ ] Admin can activate/deactivate a salon
-- [ ] Deactivated salon's booking page shows appropriate message
-- [ ] Admin can delete a salon (with confirmation)
-- [ ] Admin can log out
-
 ---
 
 ### Phase 2: Salon Owner Dashboard
@@ -74,140 +92,223 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 **Location:** `/dashboard/*`
 **Access:** Authenticated salon owners only
 
-#### 2.1 Dashboard Overview
-| Feature | Description | URL |
-|---------|-------------|-----|
-| Statistics | Today's bookings, revenue, total clients | `/dashboard` |
-| Quick Actions | Navigate to common tasks | `/dashboard` |
+#### 2.1 Dashboard Overview `/dashboard`
 
-#### 2.2 Services Management
-| Feature | Description | URL |
-|---------|-------------|-----|
-| View Services | List all salon services | `/dashboard/usluge` |
-| Add Service | Create new service with name, duration, price | `/dashboard/usluge` |
-| Edit Service | Modify service details | `/dashboard/usluge` |
-| Delete Service | Remove service | `/dashboard/usluge` |
-| Toggle Active | Enable/disable service for booking | `/dashboard/usluge` |
+**Layout (2 columns on desktop):**
+- Left column: Stats cards + Quick actions
+- Right column: Upcoming bookings
 
-**Test Scenarios - Services:**
-- [ ] Owner can view all services
-- [ ] Owner can add service with name, duration (minutes), price
-- [ ] System validates required fields
-- [ ] Owner can edit existing service
-- [ ] Owner can delete service (with confirmation)
-- [ ] Owner can toggle service active/inactive
-- [ ] Inactive services don't appear on public booking page
+**Stats Cards:**
+| Card | Content | Click Action |
+|------|---------|--------------|
+| Zakazivanja | Danas: X, Ove nedelje: X | → `/dashboard/kalendar` |
+| Klijenti | Ukupno u bazi: X | → `/dashboard/klijenti` |
 
-#### 2.3 Client Management
-| Feature | Description | URL |
-|---------|-------------|-----|
-| View Clients | List all clients with search | `/dashboard/klijenti` |
-| Add Client | Create client with phone, name, notes | `/dashboard/klijenti` |
-| Edit Client | Modify client details | `/dashboard/klijenti` |
-| Delete Client | Remove client | `/dashboard/klijenti` |
-| View History | See client's booking history | `/dashboard/klijenti` |
+**Quick Actions (popup dialogs):**
+| Action | Behavior |
+|--------|----------|
+| Novo zakazivanje | Opens booking popup form |
+| Dodaj uslugu | Opens service popup form |
+| Pregled kalendara | Navigates to `/dashboard/kalendar` |
+| Finansijski izveštaj | Navigates to `/dashboard/finansije` |
 
-**Test Scenarios - Clients:**
-- [ ] Owner can view all clients
-- [ ] Owner can search clients by name or phone
-- [ ] Owner can add client with phone (required) and name (optional)
-- [ ] Owner can edit client details
-- [ ] Owner can add/edit notes for client
-- [ ] Owner can view client's booking history
-- [ ] Owner can delete client
+**Predstojeći termini:**
+- Shows next 5 upcoming bookings
+- Displays: customer name/phone, service, time, date
+- "Svi termini" button → `/dashboard/kalendar`
 
-#### 2.4 Bookings Management
-| Feature | Description | URL |
-|---------|-------------|-----|
-| View Bookings | List bookings with filters | `/dashboard/zakazivanja` |
-| Filter by Status | Filter: all, pending, confirmed, completed, cancelled | `/dashboard/zakazivanja` |
-| Filter by Date | Filter by specific date | `/dashboard/zakazivanja` |
-| Add Booking | Create manual booking | `/dashboard/zakazivanja` |
-| Edit Booking | Modify booking details | `/dashboard/zakazivanja` |
-| Change Status | Update booking status | `/dashboard/zakazivanja` |
-| Delete Booking | Remove booking | `/dashboard/zakazivanja` |
+---
 
-**Test Scenarios - Bookings:**
-- [ ] Owner can view all bookings
-- [ ] Owner can filter bookings by status
-- [ ] Owner can filter bookings by date
-- [ ] Owner can create manual booking (select service, client, date, time)
-- [ ] Manual booking respects working hours
-- [ ] Manual booking respects blocked slots
-- [ ] Manual booking prevents double-booking
-- [ ] Owner can edit booking details
-- [ ] Owner can change booking status
-- [ ] Owner can delete booking
+#### 2.2 Calendar & Bookings `/dashboard/kalendar`
 
-#### 2.5 Calendar View
-| Feature | Description | URL |
-|---------|-------------|-----|
-| Monthly Calendar | Visual calendar with bookings | `/dashboard/kalendar` |
-| Day View | Click date to see day's bookings | `/dashboard/kalendar` |
-| Quick Add | Add booking from calendar | `/dashboard/kalendar` |
+**Two Tabs:**
 
-**Test Scenarios - Calendar:**
-- [ ] Calendar displays current month
-- [ ] Calendar shows booking indicators on dates
-- [ ] Owner can navigate between months
-- [ ] Clicking a date shows that day's bookings
-- [ ] Calendar uses Serbian Latin locale (not Cyrillic)
+**Tab 1: Kalendar (Calendar View)**
+- Weekly calendar (Monday-Sunday)
+- Navigation: Previous/Next week, "Danas" button
+- Date range displayed in header
+- Bookings shown per day with:
+  - Time
+  - Status badge (color-coded)
+  - Customer name/phone
+  - Service name
+- Today highlighted with accent color
+- Click on booking shows details
 
-#### 2.6 Working Hours
-| Feature | Description | URL |
-|---------|-------------|-----|
-| View Schedule | See weekly working hours | `/dashboard/podesavanja` |
-| Set Hours | Define start/end time per day | `/dashboard/podesavanja` |
-| Toggle Day | Mark day as working or closed | `/dashboard/podesavanja` |
+**Today's Bookings Section (below calendar):**
+- List of all bookings for current day
+- Each booking shows:
+  - Time
+  - Customer name/phone
+  - Service name
+  - Status badge
+  - Action buttons
 
-**Test Scenarios - Working Hours:**
-- [ ] Owner can view all 7 days with hours
-- [ ] Owner can set start and end time for each day
-- [ ] Owner can mark a day as closed (non-working)
-- [ ] Changes save correctly
-- [ ] Working hours affect available slots on booking page
+**Tab 2: Evidencija (List View)**
+- Filter by status: Svi, Na čekanju, Potvrđeno, Završeno, Otkazano
+- Filter by date
+- "Poništi" button clears filters
+- Table columns: Datum/vreme, Klijent, Usluga, Cena, Status, Akcije
 
-#### 2.7 Blocked Slots
-| Feature | Description | URL |
-|---------|-------------|-----|
-| View Blocked | List all blocked time slots | `/dashboard/podesavanja` |
-| Add Block | Block specific date/time range | `/dashboard/podesavanja` |
-| Add Reason | Optional reason for blocking | `/dashboard/podesavanja` |
-| Delete Block | Remove blocked slot | `/dashboard/podesavanja` |
+**Booking Status Colors:**
+| Status | Serbian | Color |
+|--------|---------|-------|
+| pending | Na čekanju | Warning (gold) |
+| confirmed | Potvrđeno | Success (teal) |
+| completed | Završeno | Success (teal) |
+| cancelled | Otkazano | Destructive (red) |
 
-**Test Scenarios - Blocked Slots:**
-- [ ] Owner can view all blocked slots
-- [ ] Owner can add blocked slot with date, start time, end time
-- [ ] Owner can add optional reason
-- [ ] Owner can delete blocked slot
-- [ ] Blocked slots prevent bookings on public page
-- [ ] Blocked slots prevent manual bookings in dashboard
+**Booking Actions:**
+| Action | Icon | Condition | Behavior |
+|--------|------|-----------|----------|
+| Izmeni | Pencil | pending/confirmed | Opens edit popup |
+| Potvrdi | Button | pending only | Changes to confirmed |
+| Završi | Button | pending/confirmed | Changes to completed |
+| Otkaži | Button | pending/confirmed | Opens AlertDialog confirmation |
 
-#### 2.8 Finances
-| Feature | Description | URL |
-|---------|-------------|-----|
-| Revenue Summary | Total revenue for period | `/dashboard/finansije` |
-| Filter Period | Filter by date range | `/dashboard/finansije` |
-| Completed Bookings | List of completed bookings with revenue | `/dashboard/finansije` |
+**Popup: Novo/Izmeni zakazivanje**
+- Service dropdown (active services only)
+- Customer phone (required)
+- Customer name (optional)
+- Date picker
+- Time picker
+- Service summary (duration, price)
+- Buttons: Otkaži, Zakaži termin / Sačuvaj izmene
 
-**Test Scenarios - Finances:**
-- [ ] Owner can view total revenue
-- [ ] Owner can filter by date range
-- [ ] Only completed bookings count toward revenue
-- [ ] Revenue calculates correctly based on service prices
+**AlertDialog: Otkazivanje termina**
+- Title: "Otkazivanje termina"
+- Warning message
+- Buttons: Odustani, Potvrdi (red)
 
-#### 2.9 Salon Settings
-| Feature | Description | URL |
-|---------|-------------|-----|
-| Edit Info | Update salon name, email, phone | `/dashboard/podesavanja` |
-| Description | Update salon description | `/dashboard/podesavanja` |
+---
 
-**Test Scenarios - Settings:**
-- [ ] Owner can update salon name
-- [ ] Owner can update contact email
-- [ ] Owner can update phone number
-- [ ] Owner can update description
-- [ ] Changes reflect on public booking page
+#### 2.3 Services `/dashboard/usluge`
+
+**Header:**
+- Title: "Usluge"
+- "Nova usluga" button → opens popup
+
+**Table:**
+| Column | Content |
+|--------|---------|
+| Naziv | Service name |
+| Trajanje | Duration in minutes |
+| Cena | Price in RSD (gold color) |
+| Status | Toggle: Aktivna/Neaktivna |
+| Akcije | Edit (pencil), Delete (trash) |
+
+**Popup: Nova/Izmeni usluga**
+- Naziv usluge (required)
+- Trajanje u minutima (required, min 15, step 15)
+- Cena u RSD (required)
+- Buttons: Otkaži, Dodaj / Sačuvaj
+
+**AlertDialog: Brisanje usluge**
+- Shows service name
+- Warning: "Ova akcija se ne može poništiti"
+- Buttons: Odustani, Obriši (red)
+
+---
+
+#### 2.4 Clients `/dashboard/klijenti`
+
+**Header:**
+- Title: "Klijenti"
+- "Novi klijent" button → opens popup
+
+**Stats Cards:**
+| Card | Content |
+|------|---------|
+| Ukupno klijenata | Total count |
+| Ukupno poseta | Sum of all visits |
+| Ukupan promet | Total spent (RSD) |
+
+**Search:**
+- Input field: "Pretražite po imenu ili broju telefona..."
+- "Pretraži" button
+
+**Table:**
+| Column | Content |
+|--------|---------|
+| Telefon | Phone (monospace) |
+| Ime | Name or "-" |
+| Poseta | Number of visits |
+| Potrošeno | Total spent (RSD, gold) |
+| Poslednja poseta | Date or "-" |
+| Akcije | Edit (pencil), Detalji |
+
+**Popup: Novi/Izmeni klijent**
+- Telefon (required)
+- Ime (optional)
+- Buttons: Otkaži, Dodaj klijenta / Sačuvaj
+
+**Dialog: Detalji klijenta**
+- Phone, Name
+- Total visits, Total spent
+- Booking history (scrollable list)
+- Each booking: service, date/time, price, status badge
+
+---
+
+#### 2.5 Finances `/dashboard/finansije`
+
+- Revenue chart
+- Transaction table
+- Period filters
+- Total amounts
+
+---
+
+#### 2.6 Settings `/dashboard/podesavanja`
+
+**Three Tabs:**
+
+**Tab 1: Opšte (General)**
+- Naziv salona
+- Adresa
+- Telefon
+- Email
+- "Sačuvaj" button
+
+**Tab 2: Radno vreme (Working Hours)**
+
+*Weekly Schedule:*
+- All 7 days displayed in compact grid
+- Each day shows: Day name, Status (Radi/Ne radi), Hours (od-do)
+- Edit button per day → opens dialog
+
+*Dialog: Izmeni radno vreme*
+- Day name in title
+- Toggle: Radi danas
+- If working: Start time, End time
+- Buttons: Otkaži, Sačuvaj
+
+*Blocked Slots:*
+- List of all blocked time slots
+- Each shows: Date, Time range, Reason (if any), Delete button
+- "Dodaj blokirani termin" button → opens dialog
+
+*Dialog: Novi blokirani termin*
+- Datum (required)
+- Vreme od (required)
+- Vreme do (required)
+- Razlog (optional)
+- Buttons: Otkaži, Dodaj
+
+**Tab 3: Brendiranje (Branding)**
+
+*Color Themes:*
+- 6 preset themes: Zlatna, Roze, Ljubičasta, Plava, Zelena, Crvena
+- Each theme has Light/Dark variant
+- Radio button selection
+
+*Preview:*
+- Live preview of booking page
+- Shows up to 3 services from database
+- Updates with theme selection
+
+*Save:*
+- "Sačuvaj izmene" button
 
 ---
 
@@ -216,128 +317,135 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 **Location:** `/book/[slug]`
 **Access:** Public (no authentication required)
 
-| Feature | Description |
-|---------|-------------|
-| Salon Page | View salon info and services |
-| Service Selection | Step 1: Choose a service |
-| Date Selection | Step 2: Pick available date |
-| Time Selection | Step 2: Pick available time slot |
-| Contact Info | Step 3: Enter phone and optional name |
-| Booking Confirmation | Confirmation page with details |
+| Step | Feature | Description |
+|------|---------|-------------|
+| 1 | Salon Page | View salon info, logo, banner |
+| 2 | Service Selection | Choose from active services |
+| 3 | Date Selection | Pick available date (next 14 days) |
+| 4 | Time Selection | Pick available time slot |
+| 5 | Contact Info | Enter phone (required), name (optional) |
+| 6 | Confirmation | View booking details |
 
-**Test Scenarios - Public Booking:**
-- [ ] Public page loads for valid salon slug
-- [ ] Invalid slug shows "Salon not found" error
-- [ ] Inactive salon shows appropriate message
-- [ ] All active services are displayed
-- [ ] Inactive services are NOT displayed
-- [ ] User can select a service
-- [ ] Available dates show for next 14 days
+**Availability Rules:**
+- Respects working hours
+- Respects blocked slots
+- Respects existing bookings
+- Accounts for service duration
+- Prevents double-booking
+
+---
+
+## Test Scenarios
+
+### Authentication
+- [ ] Salon owner can log in with valid credentials
+- [ ] Invalid credentials show error message
+- [ ] Logout redirects to login page
+- [ ] Session expires correctly
+- [ ] Protected routes redirect to login
+
+### Dashboard Overview
+- [ ] Stats cards show correct numbers
+- [ ] Clicking Zakazivanja → navigates to kalendar
+- [ ] Clicking Klijenti → navigates to klijenti
+- [ ] "Novo zakazivanje" opens popup form
+- [ ] "Dodaj uslugu" opens popup form
+- [ ] Upcoming bookings list shows correct data
+- [ ] "Svi termini" navigates to kalendar
+
+### Booking Popup (Dashboard)
+- [ ] Service dropdown shows active services only
+- [ ] Phone field is required
+- [ ] Name field is optional
+- [ ] Date defaults to today
+- [ ] Service summary shows duration and price
+- [ ] Submit creates booking
+- [ ] Cancel closes popup without saving
+- [ ] Edit mode pre-fills all fields
+- [ ] Edit mode updates booking on save
+
+### Calendar
+- [ ] Weekly view shows correct dates
+- [ ] Navigation changes week
+- [ ] "Danas" returns to current week
+- [ ] Bookings appear on correct days
+- [ ] Today is highlighted
+- [ ] Status badges show correct colors
+- [ ] Today's bookings section shows correct data
+
+### Booking Actions
+- [ ] "Potvrdi" changes status to confirmed
+- [ ] "Završi" changes status to completed
+- [ ] "Otkaži" opens confirmation dialog
+- [ ] Confirmation dialog has Odustani/Potvrdi
+- [ ] Cancel changes status to cancelled
+- [ ] Edit button opens popup with data
+- [ ] Edit saves changes correctly
+
+### Evidencija (List View)
+- [ ] Table shows all bookings
+- [ ] Status filter works
+- [ ] Date filter works
+- [ ] "Poništi" clears filters
+- [ ] Actions work same as calendar view
+
+### Services
+- [ ] Table shows all services
+- [ ] "Nova usluga" opens popup
+- [ ] Create service works
+- [ ] Edit button opens popup with data
+- [ ] Edit saves changes
+- [ ] Delete opens confirmation dialog
+- [ ] Delete removes service
+- [ ] Status toggle works
+- [ ] Inactive services hidden from booking
+
+### Clients
+- [ ] Stats cards show correct totals
+- [ ] Search by name works
+- [ ] Search by phone works
+- [ ] "Novi klijent" opens popup
+- [ ] Create client works
+- [ ] Edit button opens popup with data
+- [ ] Edit saves changes
+- [ ] "Detalji" opens history dialog
+- [ ] History shows all bookings
+
+### Settings - Opšte
+- [ ] Form shows current values
+- [ ] Save updates salon info
+- [ ] Changes reflect on booking page
+
+### Settings - Radno vreme
+- [ ] All 7 days displayed
+- [ ] Edit day opens dialog
+- [ ] Toggle working day works
+- [ ] Time inputs work
+- [ ] Save updates working hours
+- [ ] Blocked slots list shows all
+- [ ] Add blocked slot works
+- [ ] Delete blocked slot works
+
+### Settings - Brendiranje
+- [ ] Theme presets display
+- [ ] Light/Dark variants work
+- [ ] Preview updates live
+- [ ] Save persists theme
+- [ ] Booking page reflects theme
+
+### Public Booking
+- [ ] Valid slug loads salon
+- [ ] Invalid slug shows error
+- [ ] Inactive salon shows message
+- [ ] Active services displayed
+- [ ] Date picker shows 14 days
 - [ ] Time slots respect working hours
 - [ ] Time slots respect blocked slots
-- [ ] Time slots respect existing bookings
-- [ ] Time slots account for service duration
-- [ ] User can select date and time
-- [ ] User must enter phone number
-- [ ] Name field is optional
-- [ ] Booking submits successfully
-- [ ] Confirmation page shows booking details
-- [ ] Double-booking is prevented (race condition)
-- [ ] Calendar and dates use Serbian Latin locale
-
----
-
-### Phase 4: Booking Page Customization (Branding)
-
-**Location:** `/dashboard/brendiranje`
-**Access:** Authenticated salon owners
-
-| Feature | Description |
-|---------|-------------|
-| Logo Upload | Upload salon logo (max 5MB, image formats) |
-| Banner Upload | Upload header banner image |
-| Color Presets | 8 predefined color themes |
-| Custom Colors | Accent, background, text colors |
-| Button Style | Rounded, square, or pill buttons |
-| Theme | Light, dark, or auto |
-| Welcome Message | Custom greeting text |
-| Live Preview | Real-time preview of changes |
-
-**Color Presets:**
-- Roze (Pink)
-- Ljubičasta (Purple)
-- Plava (Blue)
-- Zelena (Green)
-- Narandžasta (Orange)
-- Crvena (Red)
-- Tamna (Dark)
-- Elegantna (Elegant/Gold)
-
-**Test Scenarios - Branding:**
-- [ ] Owner can upload logo (JPEG, PNG, WebP, GIF)
-- [ ] Logo upload rejects files > 5MB
-- [ ] Logo upload rejects non-image files
-- [ ] Owner can remove uploaded logo
-- [ ] Owner can upload banner image
-- [ ] Owner can remove banner image
-- [ ] Owner can apply color preset
-- [ ] Preset changes all colors at once
-- [ ] Owner can set custom accent color
-- [ ] Owner can set custom background color
-- [ ] Owner can set custom text color
-- [ ] Color picker and hex input both work
-- [ ] Owner can change button style
-- [ ] Owner can change theme
-- [ ] Owner can add welcome message
-- [ ] Live preview updates in real-time
-- [ ] Save button persists all changes
-- [ ] Public booking page reflects saved branding
-- [ ] Logo appears on public page header
-- [ ] Banner appears on public page header
-- [ ] Colors apply correctly to public page
-- [ ] Button style applies to all buttons
-- [ ] Welcome message displays on public page
-
----
-
-## Planned Features
-
-### Phase 5: Notifications
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| SMS Confirmation | Send SMS when booking created | High |
-| SMS Reminder | Send reminder before appointment | High |
-| Email Confirmation | Send email with booking details | Medium |
-| Email Reminder | Send reminder before appointment | Medium |
-| Owner Notifications | Notify owner of new bookings | Medium |
-
-### Phase 6: Analytics & Reporting
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Booking Analytics | Charts for booking trends | Medium |
-| Revenue Reports | Detailed revenue breakdown | Medium |
-| Popular Services | Most booked services report | Low |
-| Client Analytics | Client visit frequency | Low |
-| Export Reports | PDF/CSV export | Low |
-
-### Phase 7: Advanced Features
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Multi-Staff Support | Multiple employees per salon | High |
-| Staff Scheduling | Per-employee working hours | High |
-| Online Payments | Accept payments online | Medium |
-| Deposits | Require deposit for booking | Medium |
-| Client Loyalty | Points/rewards system | Low |
-| Gift Cards | Digital gift cards | Low |
-| Recurring Bookings | Regular appointment scheduling | Low |
-
-### Phase 8: Platform Features
-| Feature | Description | Priority |
-|---------|-------------|----------|
-| Custom Domains | Salon's own domain | Low |
-| Mobile App | Native iOS/Android app | Low |
-| Multi-language | Support for multiple languages | Low |
-| Integrations | Google Calendar, etc. | Low |
+- [ ] Time slots respect bookings
+- [ ] Phone required for submit
+- [ ] Booking creates successfully
+- [ ] Confirmation page shows details
+- [ ] Double-booking prevented
 
 ---
 
@@ -348,184 +456,232 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 |--------|----------|-------------|
 | POST | `/api/auth/signin` | User login |
 | POST | `/api/auth/signout` | User logout |
-| GET | `/api/auth/session` | Get current session |
-
-### Admin APIs
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/tenants` | List all salons |
-| POST | `/api/admin/tenants` | Create salon |
-| PUT | `/api/admin/tenants` | Update salon |
-| DELETE | `/api/admin/tenants?id={id}` | Delete salon |
 
 ### Dashboard APIs
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/dashboard/stats` | Get dashboard statistics |
+| GET | `/api/dashboard/stats` | Dashboard statistics |
 | GET | `/api/dashboard/salon` | Get salon details |
 | PUT | `/api/dashboard/salon` | Update salon details |
-| PUT | `/api/dashboard/branding` | Update branding settings |
+| PUT | `/api/dashboard/branding` | Update branding |
 | POST | `/api/dashboard/upload` | Upload logo/banner |
 | GET | `/api/dashboard/services` | List services |
 | POST | `/api/dashboard/services` | Create service |
-| PUT | `/api/dashboard/services` | Update service |
-| DELETE | `/api/dashboard/services?id={id}` | Delete service |
+| PUT | `/api/dashboard/services/[id]` | Update service |
+| DELETE | `/api/dashboard/services/[id]` | Delete service |
 | GET | `/api/dashboard/clients` | List clients |
 | POST | `/api/dashboard/clients` | Create client |
-| PUT | `/api/dashboard/clients` | Update client |
-| DELETE | `/api/dashboard/clients?id={id}` | Delete client |
+| PUT | `/api/dashboard/clients/[id]` | Update client |
+| GET | `/api/dashboard/clients/[id]` | Get client details |
 | GET | `/api/dashboard/bookings` | List bookings |
 | POST | `/api/dashboard/bookings` | Create booking |
-| PUT | `/api/dashboard/bookings` | Update booking |
-| DELETE | `/api/dashboard/bookings?id={id}` | Delete booking |
+| PUT | `/api/dashboard/bookings/[id]` | Update booking (status, service, customer, datetime) |
+| DELETE | `/api/dashboard/bookings/[id]` | Cancel booking |
 | GET | `/api/dashboard/working-hours` | Get working hours |
-| PUT | `/api/dashboard/working-hours` | Update working hours |
+| POST | `/api/dashboard/working-hours` | Create working hour |
+| PUT | `/api/dashboard/working-hours/[id]` | Update working hour |
 | GET | `/api/dashboard/blocked-slots` | List blocked slots |
 | POST | `/api/dashboard/blocked-slots` | Create blocked slot |
-| DELETE | `/api/dashboard/blocked-slots?id={id}` | Delete blocked slot |
-| GET | `/api/dashboard/finances` | Get financial data |
+| DELETE | `/api/dashboard/blocked-slots/[id]` | Delete blocked slot |
+| GET | `/api/dashboard/finances` | Financial data |
 
 ### Public APIs
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/public/[slug]` | Get salon info and services |
-| GET | `/api/public/[slug]/availability` | Get available time slots |
+| GET | `/api/public/[slug]` | Salon info + services |
+| GET | `/api/public/[slug]/availability` | Available time slots |
 | POST | `/api/public/[slug]/book` | Create booking |
+| GET | `/api/public/[slug]/booking/[id]` | Get booking details |
 
 ---
 
 ## Database Schema
 
-### Tables
+### tenants (Salons)
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| name | TEXT | Salon name |
+| slug | TEXT | URL slug (unique) |
+| email | TEXT | Contact email |
+| phone | TEXT | Contact phone |
+| address | TEXT | Address |
+| description | TEXT | Description |
+| logo_url | TEXT | Logo image URL |
+| banner_url | TEXT | Banner image URL |
+| accent_color | TEXT | Theme accent color |
+| background_color | TEXT | Theme background |
+| text_color | TEXT | Theme text color |
+| is_active | BOOLEAN | Active status |
+| created_at | TIMESTAMP | Creation date |
 
-**tenants** (Salons)
-- id (UUID, PK)
-- name (TEXT)
-- slug (TEXT, unique)
-- subdomain (TEXT, unique)
-- email (TEXT)
-- phone (TEXT)
-- description (TEXT, nullable)
-- logo_url (TEXT, nullable)
-- banner_url (TEXT, nullable)
-- accent_color (TEXT, nullable)
-- background_color (TEXT, nullable)
-- text_color (TEXT, nullable)
-- button_style (TEXT, nullable)
-- theme (TEXT, nullable)
-- welcome_message (TEXT, nullable)
-- is_active (BOOLEAN)
-- created_at (TIMESTAMP)
+### users
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| email | TEXT | User email |
+| role | TEXT | 'admin' or 'client' |
+| tenant_id | UUID | FK to tenants |
+| created_at | TIMESTAMP | Creation date |
 
-**users**
-- id (UUID, PK)
-- email (TEXT)
-- role (TEXT: 'admin' | 'client')
-- tenant_id (UUID, FK → tenants, nullable)
-- created_at (TIMESTAMP)
+### services
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| tenant_id | UUID | FK to tenants |
+| name | TEXT | Service name |
+| duration_minutes | INTEGER | Duration |
+| price | DECIMAL | Price in RSD |
+| is_active | BOOLEAN | Active status |
+| created_at | TIMESTAMP | Creation date |
 
-**services**
-- id (UUID, PK)
-- tenant_id (UUID, FK → tenants)
-- name (TEXT)
-- duration_minutes (INTEGER)
-- price (DECIMAL)
-- is_active (BOOLEAN)
-- created_at (TIMESTAMP)
+### customers
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| tenant_id | UUID | FK to tenants |
+| phone | TEXT | Phone number |
+| name | TEXT | Customer name |
+| created_at | TIMESTAMP | Creation date |
 
-**clients**
-- id (UUID, PK)
-- tenant_id (UUID, FK → tenants)
-- phone (TEXT)
-- name (TEXT, nullable)
-- notes (TEXT, nullable)
-- created_at (TIMESTAMP)
+### bookings
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| tenant_id | UUID | FK to tenants |
+| service_id | UUID | FK to services |
+| customer_id | UUID | FK to customers |
+| start_datetime | TIMESTAMP | Start time |
+| end_datetime | TIMESTAMP | End time |
+| status | TEXT | pending/confirmed/completed/cancelled |
+| created_at | TIMESTAMP | Creation date |
 
-**bookings**
-- id (UUID, PK)
-- tenant_id (UUID, FK → tenants)
-- service_id (UUID, FK → services)
-- client_id (UUID, FK → clients)
-- date (DATE)
-- start_time (TIME)
-- end_time (TIME)
-- status (TEXT: 'pending' | 'confirmed' | 'completed' | 'cancelled')
-- created_at (TIMESTAMP)
+### working_hours
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| tenant_id | UUID | FK to tenants |
+| day_of_week | INTEGER | 0-6 (Mon-Sun) |
+| start_time | TIME | Opening time |
+| end_time | TIME | Closing time |
+| is_working | BOOLEAN | Working day |
 
-**working_hours**
-- id (UUID, PK)
-- tenant_id (UUID, FK → tenants)
-- day_of_week (INTEGER: 0-6)
-- start_time (TIME)
-- end_time (TIME)
-- is_working (BOOLEAN)
+### blocked_slots
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| tenant_id | UUID | FK to tenants |
+| date | DATE | Block date |
+| start_time | TIME | Start time |
+| end_time | TIME | End time |
+| reason | TEXT | Optional reason |
+| created_at | TIMESTAMP | Creation date |
 
-**blocked_slots**
-- id (UUID, PK)
-- tenant_id (UUID, FK → tenants)
-- date (DATE)
-- start_time (TIME)
-- end_time (TIME)
-- reason (TEXT, nullable)
-- created_at (TIMESTAMP)
+### financial_entries
+| Column | Type | Description |
+|--------|------|-------------|
+| id | UUID | Primary key |
+| tenant_id | UUID | FK to tenants |
+| type | TEXT | income/expense |
+| category | TEXT | Category |
+| amount | DECIMAL | Amount |
+| description | TEXT | Description |
+| entry_date | DATE | Entry date |
+| booking_id | UUID | FK to bookings |
+| created_at | TIMESTAMP | Creation date |
 
 ---
 
-## Test Environment Setup
+## Mobile Responsive Testing
 
-### Production Environment
-- **URL:** https://dragica-web-app.vercel.app
-- **Admin Panel:** https://dragica-web-app.vercel.app/admin
-- **Dashboard:** https://dragica-web-app.vercel.app/dashboard
-- **Public Booking:** https://dragica-web-app.vercel.app/book/[salon-slug]
+### Screen Sizes to Test
+| Device | Width |
+|--------|-------|
+| iPhone SE | 375px |
+| iPhone 12/13 | 390px |
+| iPhone 12/13 Pro Max | 428px |
+| Samsung Galaxy S21 | 360px |
+| iPad Mini | 768px |
+| iPad Pro | 1024px |
 
-### Local Development
-```bash
-git clone https://github.com/markokuler/dragica.git
-cd dragica
-npm install
-npm run dev
-```
+### Mobile Navigation
+- [ ] Menu button on LEFT side of header
+- [ ] Menu button opens Sheet (slide from left)
+- [ ] Sheet shows full sidebar content
+- [ ] Clicking nav item CLOSES menu
+- [ ] Logo "Dragica" + slogan in header
+- [ ] Header height: 72px
 
-### Environment Variables
-Configure in `.env.local` (local) or Vercel Dashboard (production):
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anon key
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
-- `NEXT_PUBLIC_APP_URL` - App URL (production: `https://dragica-web-app.vercel.app`)
-- `NEXT_PUBLIC_BASE_DOMAIN` - Base domain (production: `dragica-web-app.vercel.app`)
+### Mobile Dashboard
+- [ ] Stats cards stack vertically
+- [ ] Quick actions full width
+- [ ] Upcoming bookings scrollable
+- [ ] All text readable (min 14px)
 
-### Test Accounts
-- Admin: (create via Supabase Auth Dashboard)
-- Salon Owner: (created automatically when admin adds a salon)
+### Mobile Calendar
+- [ ] Weekly view horizontally scrollable
+- [ ] Day columns readable
+- [ ] Booking cards fit content
+- [ ] Tab switching works
 
-### Test Data Setup
-1. Log in as admin
-2. Create a test salon via admin panel
-3. Log in as salon owner
-4. Add services, working hours, blocked slots
-5. Create test bookings
-6. Test public booking page
+### Mobile Tables (Evidencija, Usluge, Klijenti)
+- [ ] Tables horizontally scrollable
+- [ ] Column headers visible
+- [ ] Action buttons accessible
+- [ ] Row height comfortable for touch
+
+### Mobile Popup Forms
+- [ ] Dialogs full width on small screens
+- [ ] Input fields min 16px font (prevent zoom)
+- [ ] Buttons min 44px height (touch target)
+- [ ] Keyboard doesn't obscure inputs
+- [ ] Select dropdowns work properly
+
+### Mobile Settings
+- [ ] Tabs horizontally scrollable
+- [ ] Forms full width
+- [ ] Working hours grid readable
+- [ ] Theme preview fits screen
+
+---
+
+## Localization Notes
+
+- All UI text: Serbian (Latin script)
+- Date format: `d. MMM yyyy` (e.g., "4. feb 2026")
+- Time format: 24-hour `HH:mm` (e.g., "14:30")
+- Day names: Serbian Latin (pon, uto, sre, čet, pet, sub, ned)
+- Month names: Serbian Latin (jan, feb, mar, apr, maj, jun, jul, avg, sep, okt, nov, dec)
+- Currency: RSD (Serbian Dinar)
+- Locale library: `date-fns/locale/sr-Latn`
 
 ---
 
 ## Known Limitations
 
 1. **No SMS/Email:** Notifications not yet implemented
-2. **Single Staff:** Each salon has only one staff member
+2. **Single Staff:** Each salon has one staff member only
 3. **No Payments:** Online payment not available
-4. **No Mobile App:** Web only
-5. **Serbian Only:** UI is in Serbian language
+4. **No Mobile App:** Web only (responsive)
+5. **Serbian Only:** No multi-language support
 
 ---
 
-## Localization Notes
+## Planned Features
 
-- All UI text is in Serbian (Latin script)
-- Date format: Serbian Latin locale (srLatn)
-- Currency: RSD (Serbian Dinar)
-- Time format: 24-hour (HH:mm)
+| Feature | Priority |
+|---------|----------|
+| SMS notifications | High |
+| Email notifications | High |
+| Multi-staff support | High |
+| Online payments | Medium |
+| Analytics dashboard | Medium |
+| Client loyalty program | Low |
+| Mobile app | Low |
+| Multi-language | Low |
 
 ---
 
-**Document prepared for external QA testing**
+**Document Version:** 2.0
+**Updated by:** Claude Code
+**Date:** February 4, 2026

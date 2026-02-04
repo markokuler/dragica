@@ -55,9 +55,9 @@ export async function PUT(
     const supabase = createAdminClient()
 
     const body = await request.json()
-    const { status } = body
+    const { status, service_id, customer_phone, customer_name, start_datetime } = body
 
-    // Validate status
+    // Validate status if provided
     const validStatuses = ['pending', 'confirmed', 'completed', 'cancelled']
     if (status && !validStatuses.includes(status)) {
       return NextResponse.json(
@@ -78,9 +78,70 @@ export async function PUT(
       return NextResponse.json({ error: 'Zakazivanje nije pronađeno' }, { status: 404 })
     }
 
-    // Update booking
+    // Handle customer update/creation if phone provided
+    let customerId = existingBooking.customer_id
+    if (customer_phone) {
+      // Check if customer exists
+      const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .eq('phone', customer_phone)
+        .single()
+
+      if (existingCustomer) {
+        customerId = existingCustomer.id
+        // Update customer name if provided
+        if (customer_name !== undefined) {
+          await supabase
+            .from('customers')
+            .update({ name: customer_name })
+            .eq('id', customerId)
+        }
+      } else {
+        // Create new customer
+        const { data: newCustomer } = await supabase
+          .from('customers')
+          .insert({
+            tenant_id: tenantId,
+            phone: customer_phone,
+            name: customer_name || null,
+          })
+          .select()
+          .single()
+        if (newCustomer) {
+          customerId = newCustomer.id
+        }
+      }
+    }
+
+    // Calculate end_datetime if service or start time changed
+    let endDatetime = existingBooking.end_datetime
+    const serviceIdToUse = service_id || existingBooking.service_id
+    const startDatetimeToUse = start_datetime || existingBooking.start_datetime
+
+    if (service_id || start_datetime) {
+      const { data: service } = await supabase
+        .from('services')
+        .select('duration_minutes')
+        .eq('id', serviceIdToUse)
+        .single()
+
+      if (service) {
+        const startDate = new Date(startDatetimeToUse)
+        endDatetime = new Date(startDate.getTime() + service.duration_minutes * 60000).toISOString()
+      }
+    }
+
+    // Build update data
     const updateData: any = {}
     if (status) updateData.status = status
+    if (service_id) updateData.service_id = service_id
+    if (customer_phone) updateData.customer_id = customerId
+    if (start_datetime) {
+      updateData.start_datetime = start_datetime
+      updateData.end_datetime = endDatetime
+    }
 
     const { data: booking, error: updateError } = await supabase
       .from('bookings')

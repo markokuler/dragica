@@ -82,3 +82,55 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
+export async function POST(request: NextRequest) {
+  try {
+    const userData = await getUserWithRole()
+
+    if (!userData || userData.role !== 'client') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const tenantId = userData.tenant_id
+    const supabase = createAdminClient()
+
+    const body = await request.json()
+    const { phone, name } = body
+
+    if (!phone) {
+      return NextResponse.json({ error: 'Telefon je obavezan' }, { status: 400 })
+    }
+
+    // Check if client with this phone already exists
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('tenant_id', tenantId)
+      .eq('phone', phone)
+      .single()
+
+    if (existing) {
+      return NextResponse.json({ error: 'Klijent sa ovim brojem telefona već postoji' }, { status: 400 })
+    }
+
+    const { data: client, error } = await supabase
+      .from('customers')
+      .insert({
+        tenant_id: tenantId,
+        phone,
+        name: name || null,
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Error creating client:', error)
+      return NextResponse.json({ error: 'Greška pri kreiranju klijenta' }, { status: 500 })
+    }
+
+    return NextResponse.json({ client })
+  } catch (error) {
+    console.error('Error in POST /api/dashboard/clients:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

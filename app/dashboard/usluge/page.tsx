@@ -22,6 +22,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 
 interface Service {
@@ -42,6 +52,10 @@ export default function ServicesPage() {
     duration_minutes: '',
     price: '',
   })
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [serviceToDelete, setServiceToDelete] = useState<Service | null>(null)
 
   useEffect(() => {
     fetchServices()
@@ -104,13 +118,16 @@ export default function ServicesPage() {
     setDialogOpen(true)
   }
 
-  const handleDelete = async (serviceId: string) => {
-    if (!confirm('Da li ste sigurni da želite da obrišete ovu uslugu?')) {
-      return
-    }
+  const openDeleteDialog = (service: Service) => {
+    setServiceToDelete(service)
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!serviceToDelete) return
 
     try {
-      const response = await fetch(`/api/dashboard/services/${serviceId}`, {
+      const response = await fetch(`/api/dashboard/services/${serviceToDelete.id}`, {
         method: 'DELETE',
       })
 
@@ -122,6 +139,9 @@ export default function ServicesPage() {
       }
     } catch (error) {
       console.error('Error deleting service:', error)
+    } finally {
+      setDeleteDialogOpen(false)
+      setServiceToDelete(null)
     }
   }
 
@@ -245,7 +265,7 @@ export default function ServicesPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="border-border hover:bg-transparent">
                   <TableHead>Naziv</TableHead>
                   <TableHead>Trajanje</TableHead>
                   <TableHead>Cena</TableHead>
@@ -255,10 +275,10 @@ export default function ServicesPage() {
               </TableHeader>
               <TableBody>
                 {services.map((service) => (
-                  <TableRow key={service.id}>
+                  <TableRow key={service.id} className="border-border h-14">
                     <TableCell className="font-medium">{service.name}</TableCell>
                     <TableCell>{service.duration_minutes} min</TableCell>
-                    <TableCell>{service.price.toLocaleString('sr-RS')} RSD</TableCell>
+                    <TableCell className="text-primary font-medium">{service.price.toLocaleString('sr-RS')} RSD</TableCell>
                     <TableCell>
                       <Button
                         variant="ghost"
@@ -267,8 +287,8 @@ export default function ServicesPage() {
                       >
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           service.is_active
-                            ? 'bg-green-500/10 text-green-500'
-                            : 'bg-gray-500/10 text-gray-500'
+                            ? 'bg-success/10 text-success'
+                            : 'bg-muted text-muted-foreground'
                         }`}>
                           {service.is_active ? 'Aktivna' : 'Neaktivna'}
                         </span>
@@ -278,8 +298,8 @@ export default function ServicesPage() {
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(service)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(service.id)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
+                      <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(service)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -289,6 +309,28 @@ export default function ServicesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Brisanje usluge</AlertDialogTitle>
+            <AlertDialogDescription>
+              Da li ste sigurni da želite da obrišete uslugu "{serviceToDelete?.name}"?
+              Ova akcija se ne može poništiti.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Odustani</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Obriši
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

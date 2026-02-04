@@ -55,10 +55,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">Dragica</CardTitle>
+          <CardTitle className="text-3xl font-bold text-primary">Dragica</CardTitle>
           <CardDescription>Prijavite se na vaš nalog</CardDescription>
         </CardHeader>
         <CardContent>
@@ -90,7 +90,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-md p-3">
+              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg p-3">
                 {error}
               </div>
             )}

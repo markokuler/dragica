@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
   SelectContent,
@@ -23,8 +22,34 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Plus, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, startOfMonth, endOfMonth, subMonths, subDays, isSameDay, isSameMonth } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts'
+
+// Chart colors matching the design system
+const CHART_COLORS = {
+  income: '#18C6A0',      // success/teal - distinct for income
+  expense: '#EF5050',     // error/red - distinct for expenses
+  axis: '#9CA3AF',        // muted-foreground
+  label: '#FFFFFF',       // foreground
+  grid: '#2E3545',        // border color
+}
+
+type ChartPeriod = 'days' | 'months'
+
+const PERIOD_OPTIONS: { value: ChartPeriod; label: string }[] = [
+  { value: 'days', label: 'Po danima' },
+  { value: 'months', label: 'Po mesecima' },
+]
 
 interface FinancialEntry {
   id: string
@@ -64,6 +89,11 @@ export default function FinancesPage() {
     description: '',
     entry_date: format(new Date(), 'yyyy-MM-dd'),
   })
+  const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('months')
+  const [selectedChartDate, setSelectedChartDate] = useState<Date | null>(null)
+  const [transactionFilter, setTransactionFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   // Date filters
   const today = new Date()
@@ -155,8 +185,119 @@ export default function FinancesPage() {
   const weekStats = calculateStats(entries, firstDayOfWeek)
   const monthStats = calculateStats(entries, firstDayOfMonth)
 
-  const incomeEntries = entries.filter((e) => e.type === 'income')
-  const expenseEntries = entries.filter((e) => e.type === 'expense')
+  // Prepare chart data based on selected period
+  const chartData = useMemo(() => {
+    const now = new Date()
+    const data: { name: string; fullName: string; income: number; expense: number; date: Date }[] = []
+
+    if (chartPeriod === 'days') {
+      // Last 14 days
+      for (let i = 13; i >= 0; i--) {
+        const date = subDays(now, i)
+        data.push({
+          name: format(date, 'd. MMM', { locale: srLatn }),
+          fullName: format(date, 'EEEE, d. MMMM yyyy', { locale: srLatn }),
+          income: 0,
+          expense: 0,
+          date,
+        })
+      }
+
+      entries.forEach((entry) => {
+        const entryDate = new Date(entry.entry_date)
+        const dayData = data.find((d) => isSameDay(entryDate, d.date))
+        if (dayData) {
+          if (entry.type === 'income') {
+            dayData.income += Number(entry.amount)
+          } else {
+            dayData.expense += Number(entry.amount)
+          }
+        }
+      })
+    } else {
+      // Last 6 months
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = startOfMonth(subMonths(now, i))
+        data.push({
+          name: format(monthDate, 'MMM', { locale: srLatn }),
+          fullName: format(monthDate, 'MMMM yyyy', { locale: srLatn }),
+          income: 0,
+          expense: 0,
+          date: monthDate,
+        })
+      }
+
+      entries.forEach((entry) => {
+        const entryDate = new Date(entry.entry_date)
+        const monthData = data.find((m) => isSameMonth(entryDate, m.date))
+        if (monthData) {
+          if (entry.type === 'income') {
+            monthData.income += Number(entry.amount)
+          } else {
+            monthData.expense += Number(entry.amount)
+          }
+        }
+      })
+    }
+
+    return data
+  }, [entries, chartPeriod])
+
+  // Handle chart bar click
+  const handleChartClick = (data: { name: string; date: Date } | null) => {
+    if (data) {
+      if (chartPeriod === 'months') {
+        // Set dropdown filter to the clicked month
+        setTransactionFilter(data.date.getMonth().toString())
+        setSelectedChartDate(null)
+      } else {
+        // For days, use selectedChartDate since days aren't in dropdown
+        setSelectedChartDate(data.date)
+        setTransactionFilter('all')
+      }
+    }
+  }
+
+  // Clear chart selection
+  const clearChartSelection = () => {
+    setSelectedChartDate(null)
+  }
+
+  // Filter entries based on selected chart date or dropdown filter
+  const filteredEntries = useMemo(() => {
+    let filtered = entries
+
+    // If chart date is selected, filter by that
+    if (selectedChartDate) {
+      if (chartPeriod === 'days') {
+        filtered = filtered.filter((e) => isSameDay(new Date(e.entry_date), selectedChartDate))
+      } else {
+        filtered = filtered.filter((e) => isSameMonth(new Date(e.entry_date), selectedChartDate))
+      }
+    } else if (transactionFilter !== 'all') {
+      // Filter by selected month (0-11)
+      const monthIndex = parseInt(transactionFilter, 10)
+      const now = new Date()
+      const year = now.getFullYear()
+      filtered = filtered.filter((e) => {
+        const entryDate = new Date(e.entry_date)
+        return entryDate.getMonth() === monthIndex && entryDate.getFullYear() === year
+      })
+    }
+
+    // Filter by type (income/expense)
+    if (typeFilter !== 'all') {
+      filtered = filtered.filter((e) => e.type === typeFilter)
+    }
+
+    // Filter by category
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter((e) => e.category === categoryFilter)
+    }
+
+    return filtered
+  }, [entries, selectedChartDate, chartPeriod, transactionFilter, typeFilter, categoryFilter])
+
 
   return (
     <div className="space-y-6">
@@ -167,7 +308,7 @@ export default function FinancesPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => openDialog('expense')}>
-            <ArrowDownRight className="mr-2 h-4 w-4 text-red-500" />
+            <ArrowDownRight className="mr-2 h-4 w-4 text-destructive" />
             Dodaj rashod
           </Button>
           <Button onClick={() => openDialog('income')}>
@@ -182,10 +323,10 @@ export default function FinancesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Danas</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className={`text-2xl font-bold ${todayStats.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {todayStats.profit.toLocaleString('sr-RS')} RSD
             </div>
             <p className="text-xs text-muted-foreground">
@@ -198,10 +339,10 @@ export default function FinancesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ova nedelja</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-info" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className={`text-2xl font-bold ${weekStats.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {weekStats.profit.toLocaleString('sr-RS')} RSD
             </div>
             <p className="text-xs text-muted-foreground">
@@ -214,10 +355,10 @@ export default function FinancesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ovaj mesec</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-chart-1" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className={`text-2xl font-bold ${monthStats.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {monthStats.profit.toLocaleString('sr-RS')} RSD
             </div>
             <p className="text-xs text-muted-foreground">
@@ -230,10 +371,10 @@ export default function FinancesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ukupno</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className={`text-2xl font-bold ${calculateStats(entries).profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {calculateStats(entries).profit.toLocaleString('sr-RS')} RSD
             </div>
             <p className="text-xs text-muted-foreground">{entries.length} unosa</p>
@@ -241,37 +382,267 @@ export default function FinancesPage() {
         </Card>
       </div>
 
-      {/* Entries Lists */}
-      <Tabs defaultValue="all" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="all">Sve transakcije</TabsTrigger>
-          <TabsTrigger value="income">Prihodi</TabsTrigger>
-          <TabsTrigger value="expenses">Rashodi</TabsTrigger>
-        </TabsList>
+      {/* Bar Chart */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle>Pregled finansija</CardTitle>
+            <CardDescription>
+              {chartPeriod === 'days' && 'Prihodi i rashodi poslednjih 14 dana'}
+              {chartPeriod === 'months' && 'Prihodi i rashodi poslednjih 6 meseci'}
+              {chartPeriod === 'days' && selectedChartDate && (
+                <span className="ml-2 text-primary">
+                  • Filtrirano: {format(selectedChartDate, 'd. MMM yyyy', { locale: srLatn })}
+                </span>
+              )}
+            </CardDescription>
+          </div>
+          <Select value={chartPeriod} onValueChange={(v) => setChartPeriod(v as ChartPeriod)}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIOD_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={chartData}
+                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                onClick={(state) => {
+                  if (state && state.activeLabel) {
+                    const clickedData = chartData.find((d) => d.name === state.activeLabel)
+                    if (clickedData) {
+                      handleChartClick(clickedData)
+                    }
+                  }
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART_COLORS.grid} vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  stroke={CHART_COLORS.axis}
+                  tick={{ fill: CHART_COLORS.label, fontSize: 12 }}
+                  axisLine={{ stroke: CHART_COLORS.axis }}
+                  tickLine={{ stroke: CHART_COLORS.axis }}
+                />
+                <YAxis
+                  stroke={CHART_COLORS.axis}
+                  tick={{ fill: CHART_COLORS.label, fontSize: 12 }}
+                  axisLine={{ stroke: CHART_COLORS.axis }}
+                  tickLine={{ stroke: CHART_COLORS.axis }}
+                  tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1E2330',
+                    border: '1px solid #2E3545',
+                    borderRadius: '8px',
+                    color: CHART_COLORS.label,
+                  }}
+                  labelStyle={{ color: CHART_COLORS.label, fontWeight: 600 }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload
+                      return (
+                        <div style={{
+                          backgroundColor: '#1E2330',
+                          border: '1px solid #2E3545',
+                          borderRadius: '8px',
+                          padding: '12px',
+                          color: CHART_COLORS.label,
+                        }}>
+                          <p style={{ fontWeight: 600, marginBottom: '8px' }}>{data.fullName}</p>
+                          <p style={{ color: CHART_COLORS.income }}>
+                            Prihod: {data.income.toLocaleString('sr-RS')} RSD
+                          </p>
+                          <p style={{ color: CHART_COLORS.expense }}>
+                            Rashod: {data.expense.toLocaleString('sr-RS')} RSD
+                          </p>
+                        </div>
+                      )
+                    }
+                    return null
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ color: CHART_COLORS.label }}
+                  formatter={(value) => (
+                    <span style={{ color: CHART_COLORS.label }}>
+                      {value === 'income' ? 'Prihodi' : 'Rashodi'}
+                    </span>
+                  )}
+                />
+                <Bar
+                  dataKey="income"
+                  name="income"
+                  fill={CHART_COLORS.income}
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(data) => {
+                    const clickedData = chartData.find((d) => d.name === data.name)
+                    if (clickedData) handleChartClick(clickedData)
+                  }}
+                />
+                <Bar
+                  dataKey="expense"
+                  name="expense"
+                  fill={CHART_COLORS.expense}
+                  radius={[4, 4, 0, 0]}
+                  cursor="pointer"
+                  onClick={(data) => {
+                    const clickedData = chartData.find((d) => d.name === data.name)
+                    if (clickedData) handleChartClick(clickedData)
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="all">
-          <Card>
-            <CardHeader>
-              <CardTitle>Sve transakcije</CardTitle>
-              <CardDescription>{entries.length} unosa</CardDescription>
+      {/* Transactions */}
+      <Card>
+        <CardHeader className="flex flex-col gap-4">
+          <div className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Transakcije</CardTitle>
+                  <CardDescription>
+                    {filteredEntries.length} unosa
+                    {chartPeriod === 'days' && selectedChartDate && (
+                      <button
+                        onClick={clearChartSelection}
+                        className="ml-2 text-primary hover:underline"
+                      >
+                        (poništi filter)
+                      </button>
+                    )}
+                  </CardDescription>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Select
+                  value={selectedChartDate ? 'chart' : transactionFilter}
+                  onValueChange={(v) => {
+                    if (v !== 'chart') {
+                      setSelectedChartDate(null)
+                      setTransactionFilter(v)
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-36">
+                    <SelectValue placeholder="Mesec" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Svi meseci</SelectItem>
+                    <SelectItem value="0">Januar</SelectItem>
+                  <SelectItem value="1">Februar</SelectItem>
+                  <SelectItem value="2">Mart</SelectItem>
+                  <SelectItem value="3">April</SelectItem>
+                  <SelectItem value="4">Maj</SelectItem>
+                  <SelectItem value="5">Jun</SelectItem>
+                  <SelectItem value="6">Jul</SelectItem>
+                  <SelectItem value="7">Avgust</SelectItem>
+                  <SelectItem value="8">Septembar</SelectItem>
+                  <SelectItem value="9">Oktobar</SelectItem>
+                  <SelectItem value="10">Novembar</SelectItem>
+                  <SelectItem value="11">Decembar</SelectItem>
+                  {chartPeriod === 'days' && selectedChartDate && (
+                    <SelectItem value="chart" disabled>
+                      {format(selectedChartDate, 'd. MMM', { locale: srLatn })}
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+
+              <Select value={typeFilter} onValueChange={(v) => {
+                setTypeFilter(v as 'all' | 'income' | 'expense')
+                setCategoryFilter('all') // Reset category when type changes
+              }}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Tip" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Sve</SelectItem>
+                  <SelectItem value="income">Prihodi</SelectItem>
+                  <SelectItem value="expense">Rashodi</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                <SelectTrigger className="w-44">
+                  <SelectValue placeholder="Kategorija" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Sve kategorije</SelectItem>
+                  {typeFilter === 'all' && (
+                    <>
+                      {INCOME_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {CATEGORY_LABELS[cat]}
+                        </SelectItem>
+                      ))}
+                      {EXPENSE_CATEGORIES.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {CATEGORY_LABELS[cat]}
+                        </SelectItem>
+                      ))}
+                    </>
+                  )}
+                  {typeFilter === 'income' && INCOME_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {CATEGORY_LABELS[cat]}
+                    </SelectItem>
+                  ))}
+                  {typeFilter === 'expense' && EXPENSE_CATEGORIES.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {CATEGORY_LABELS[cat]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {(transactionFilter !== 'all' || typeFilter !== 'all' || categoryFilter !== 'all' || selectedChartDate) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTransactionFilter('all')
+                    setTypeFilter('all')
+                    setCategoryFilter('all')
+                    setSelectedChartDate(null)
+                  }}
+                >
+                  Poništi filtere
+                </Button>
+              )}
+              </div>
             </CardHeader>
             <CardContent>
               {loading ? (
                 <p className="text-center py-8 text-muted-foreground">Učitavanje...</p>
-              ) : entries.length === 0 ? (
+              ) : filteredEntries.length === 0 ? (
                 <p className="text-center py-8 text-muted-foreground">Nema unosa</p>
               ) : (
                 <div className="space-y-3">
-                  {entries.slice(0, 20).map((entry) => (
+                  {filteredEntries.slice(0, 20).map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-muted"
+                      className="flex items-center justify-between p-4 rounded-lg bg-secondary/50"
                     >
                       <div className="flex items-center gap-4">
                         {entry.type === 'income' ? (
-                          <ArrowUpRight className="h-5 w-5 text-green-500" />
+                          <ArrowUpRight className="h-5 w-5 text-success" />
                         ) : (
-                          <ArrowDownRight className="h-5 w-5 text-red-500" />
+                          <ArrowDownRight className="h-5 w-5 text-destructive" />
                         )}
                         <div>
                           <p className="font-medium">
@@ -287,7 +658,7 @@ export default function FinancesPage() {
                       </div>
                       <p
                         className={`font-bold ${
-                          entry.type === 'income' ? 'text-green-500' : 'text-red-500'
+                          entry.type === 'income' ? 'text-success' : 'text-destructive'
                         }`}
                       >
                         {entry.type === 'income' ? '+' : '-'}
@@ -299,84 +670,6 @@ export default function FinancesPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="income">
-          <Card>
-            <CardHeader>
-              <CardTitle>Prihodi</CardTitle>
-              <CardDescription>{incomeEntries.length} unosa</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {incomeEntries.length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">Nema prihoda</p>
-              ) : (
-                <div className="space-y-3">
-                  {incomeEntries.slice(0, 20).map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-muted"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {CATEGORY_LABELS[entry.category] || entry.category}
-                        </p>
-                        {entry.description && (
-                          <p className="text-sm text-muted-foreground">{entry.description}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(entry.entry_date), 'd. MMM yyyy', { locale: srLatn })}
-                        </p>
-                      </div>
-                      <p className="font-bold text-green-500">
-                        +{Number(entry.amount).toLocaleString('sr-RS')} RSD
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="expenses">
-          <Card>
-            <CardHeader>
-              <CardTitle>Rashodi</CardTitle>
-              <CardDescription>{expenseEntries.length} unosa</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {expenseEntries.length === 0 ? (
-                <p className="text-center py-8 text-muted-foreground">Nema rashoda</p>
-              ) : (
-                <div className="space-y-3">
-                  {expenseEntries.slice(0, 20).map((entry) => (
-                    <div
-                      key={entry.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-muted"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {CATEGORY_LABELS[entry.category] || entry.category}
-                        </p>
-                        {entry.description && (
-                          <p className="text-sm text-muted-foreground">{entry.description}</p>
-                        )}
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(entry.entry_date), 'd. MMM yyyy', { locale: srLatn })}
-                        </p>
-                      </div>
-                      <p className="font-bold text-red-500">
-                        -{Number(entry.amount).toLocaleString('sr-RS')} RSD
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
 
       {/* Add Entry Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

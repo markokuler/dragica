@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -16,10 +17,11 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Search, Users, Phone, Calendar, DollarSign } from 'lucide-react'
+import { Search, Users, Calendar, DollarSign, Plus, Edit2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 
@@ -48,6 +50,15 @@ export default function ClientsPage() {
   const [search, setSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<ClientDetail | null>(null)
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
+
+  // Client create/edit dialog state
+  const [clientDialogOpen, setClientDialogOpen] = useState(false)
+  const [editingClient, setEditingClient] = useState<Client | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [clientForm, setClientForm] = useState({
+    phone: '',
+    name: '',
+  })
 
   useEffect(() => {
     fetchClients()
@@ -85,11 +96,64 @@ export default function ClientsPage() {
     }
   }
 
+  const openClientDialog = (client?: Client) => {
+    if (client) {
+      setEditingClient(client)
+      setClientForm({
+        phone: client.phone,
+        name: client.name || '',
+      })
+    } else {
+      setEditingClient(null)
+      setClientForm({ phone: '', name: '' })
+    }
+    setClientDialogOpen(true)
+  }
+
+  const handleSaveClient = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSubmitting(true)
+
+    try {
+      const url = editingClient
+        ? `/api/dashboard/clients/${editingClient.id}`
+        : '/api/dashboard/clients'
+
+      const response = await fetch(url, {
+        method: editingClient ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: clientForm.phone,
+          name: clientForm.name || null,
+        }),
+      })
+
+      if (response.ok) {
+        setClientDialogOpen(false)
+        fetchClients(search)
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Greška pri čuvanju klijenta')
+      }
+    } catch (error) {
+      console.error('Error saving client:', error)
+      alert('Greška pri čuvanju klijenta')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Klijenti</h1>
-        <p className="text-muted-foreground">Pregled svih klijenata vašeg salona</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Klijenti</h1>
+          <p className="text-muted-foreground">Pregled svih klijenata vašeg salona</p>
+        </div>
+        <Button onClick={() => openClientDialog()}>
+          <Plus className="mr-2 h-4 w-4" />
+          Novi klijent
+        </Button>
       </div>
 
       {/* Stats Cards */}
@@ -97,7 +161,7 @@ export default function ClientsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ukupno klijenata</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{clients.length}</div>
@@ -106,7 +170,7 @@ export default function ClientsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ukupno poseta</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <Calendar className="h-4 w-4 text-info" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -117,7 +181,7 @@ export default function ClientsPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Ukupan promet</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-success" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -168,7 +232,7 @@ export default function ClientsPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="border-border hover:bg-transparent">
                   <TableHead>Telefon</TableHead>
                   <TableHead>Ime</TableHead>
                   <TableHead>Poseta</TableHead>
@@ -179,17 +243,25 @@ export default function ClientsPage() {
               </TableHeader>
               <TableBody>
                 {clients.map((client) => (
-                  <TableRow key={client.id}>
+                  <TableRow key={client.id} className="border-border h-14">
                     <TableCell className="font-mono">{client.phone}</TableCell>
                     <TableCell>{client.name || '-'}</TableCell>
                     <TableCell>{client.totalBookings}</TableCell>
-                    <TableCell>{client.totalSpent.toLocaleString('sr-RS')} RSD</TableCell>
+                    <TableCell className="text-primary font-medium">{client.totalSpent.toLocaleString('sr-RS')} RSD</TableCell>
                     <TableCell>
                       {client.lastVisit
                         ? format(new Date(client.lastVisit), 'd. MMM yyyy', { locale: srLatn })
                         : '-'}
                     </TableCell>
                     <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mr-1"
+                        onClick={() => openClientDialog(client)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="outline"
                         size="sm"
@@ -232,7 +304,7 @@ export default function ClientsPage() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Ukupno potrošeno</p>
-                  <p className="text-lg font-bold">
+                  <p className="text-lg font-bold text-primary">
                     {selectedClient.totalSpent.toLocaleString('sr-RS')} RSD
                   </p>
                 </div>
@@ -247,7 +319,7 @@ export default function ClientsPage() {
                     {selectedClient.bookings.map((booking) => (
                       <div
                         key={booking.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-muted"
+                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/50"
                       >
                         <div>
                           <p className="font-medium">{booking.service.name}</p>
@@ -258,16 +330,16 @@ export default function ClientsPage() {
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-medium">
+                          <p className="font-medium text-primary">
                             {booking.service.price.toLocaleString('sr-RS')} RSD
                           </p>
                           <span
-                            className={`text-xs px-2 py-1 rounded ${
+                            className={`text-xs px-2 py-1 rounded-full ${
                               booking.status === 'completed'
-                                ? 'bg-green-500/10 text-green-500'
+                                ? 'bg-success/10 text-success'
                                 : booking.status === 'cancelled'
-                                ? 'bg-red-500/10 text-red-500'
-                                : 'bg-yellow-500/10 text-yellow-500'
+                                ? 'bg-destructive/10 text-destructive'
+                                : 'bg-warning/10 text-warning'
                             }`}
                           >
                             {booking.status === 'completed'
@@ -284,6 +356,50 @@ export default function ClientsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Client Dialog */}
+      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingClient ? 'Izmeni klijenta' : 'Novi klijent'}</DialogTitle>
+            <DialogDescription>
+              {editingClient ? 'Izmenite podatke o klijentu' : 'Dodajte novog klijenta u bazu'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSaveClient} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="client-phone">Telefon *</Label>
+              <Input
+                id="client-phone"
+                type="tel"
+                placeholder="+381 60 123 4567"
+                value={clientForm.phone}
+                onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="client-name">Ime (opciono)</Label>
+              <Input
+                id="client-name"
+                placeholder="Marija Petrović"
+                value={clientForm.name}
+                onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setClientDialogOpen(false)}>
+                Otkaži
+              </Button>
+              <Button type="submit" disabled={submitting || !clientForm.phone}>
+                {submitting ? 'Čuvanje...' : editingClient ? 'Sačuvaj' : 'Dodaj klijenta'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

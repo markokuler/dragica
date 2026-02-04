@@ -161,9 +161,9 @@ export default function BookingPage() {
   }
 
   // Branding values with defaults
-  const accentColor = tenant?.accent_color || '#ec4899'
-  const backgroundColor = tenant?.background_color || '#ffffff'
-  const textColor = tenant?.text_color || '#000000'
+  const accentColor = tenant?.accent_color || '#CDA661'
+  const backgroundColor = tenant?.background_color || '#181920'
+  const textColor = tenant?.text_color || '#FFFFFF'
   const buttonStyle = tenant?.button_style || 'rounded'
 
   // Button border radius based on style
