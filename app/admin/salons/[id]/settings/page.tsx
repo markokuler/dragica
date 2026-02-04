@@ -21,6 +21,7 @@ interface Salon {
   logo_url: string | null
   accent_color: string | null
   is_active: boolean
+  created_at: string
 }
 
 export default function SalonSettingsPage() {
