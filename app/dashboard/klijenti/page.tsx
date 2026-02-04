@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { Search, Users, Phone, Calendar, DollarSign } from 'lucide-react'
 import { format } from 'date-fns'
-import { srLatn } from 'date-fns/locale'
+import { srLatn } from 'date-fns/locale/sr-Latn'
 
 interface Client {
   id: string

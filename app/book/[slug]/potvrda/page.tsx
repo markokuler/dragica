@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { CheckCircle, Calendar, Clock, Phone, MapPin } from 'lucide-react'
 import { format } from 'date-fns'
-import { srLatn } from 'date-fns/locale'
+import { srLatn } from 'date-fns/locale/sr-Latn'
 import Link from 'next/link'
 
 interface BookingDetails {

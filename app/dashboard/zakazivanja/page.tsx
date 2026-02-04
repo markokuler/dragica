@@ -22,7 +22,7 @@ import {
 import { Plus, Calendar, CheckCircle, XCircle, Clock } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { srLatn } from 'date-fns/locale'
+import { srLatn } from 'date-fns/locale/sr-Latn'
 
 interface Booking {
   id: string

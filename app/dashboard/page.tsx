@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Calendar, Clock, DollarSign, Users, Plus, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { srLatn } from 'date-fns/locale'
+import { srLatn } from 'date-fns/locale/sr-Latn'
 
 interface DashboardStats {
   todayBookings: number

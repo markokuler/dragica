@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import { format } from 'date-fns'
-import { srLatn } from 'date-fns/locale'
+import { srLatn } from 'date-fns/locale/sr-Latn'
 
 interface FinancialEntry {
   id: string

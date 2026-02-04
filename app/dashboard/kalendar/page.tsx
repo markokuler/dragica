@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, Trash2, Calendar, Clock } from 'lucide-react'
 import { format } from 'date-fns'
-import { srLatn } from 'date-fns/locale'
+import { srLatn } from 'date-fns/locale/sr-Latn'
 
 interface WorkingHours {
   id: string
