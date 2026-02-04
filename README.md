@@ -75,10 +75,14 @@ NEXT_PUBLIC_SUPABASE_URL=your-project-url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-key
 
-# App Config
+# App Config (for local development)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_BASE_DOMAIN=localhost:3000
 ```
+
+**For production (Vercel)**, set these environment variables:
+- `NEXT_PUBLIC_APP_URL` = `https://dragica-web-app.vercel.app`
+- `NEXT_PUBLIC_BASE_DOMAIN` = `dragica-web-app.vercel.app`
 
 4. **Create admin user**
 

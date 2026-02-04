@@ -489,9 +489,11 @@ npm run dev
 
 ### Environment Variables
 Configure in `.env.local` (local) or Vercel Dashboard (production):
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase anon key
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+- `NEXT_PUBLIC_APP_URL` - App URL (production: `https://dragica-web-app.vercel.app`)
+- `NEXT_PUBLIC_BASE_DOMAIN` - Base domain (production: `dragica-web-app.vercel.app`)
 
 ### Test Accounts
 - Admin: (create via Supabase Auth Dashboard)
