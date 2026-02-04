@@ -317,7 +317,7 @@ export default function BookingPage() {
                     }}
                     onClick={() => handleServiceSelect(service)}
                   >
-                    <CardContent className="p-4 flex items-center justify-between">
+                    <CardContent className="p-4 flex items-center justify-between" style={{ color: textColor }}>
                       <div>
                         <h3 className="font-medium">{service.name}</h3>
                         <p className="text-sm opacity-70">
