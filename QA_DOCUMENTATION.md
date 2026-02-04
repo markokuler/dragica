@@ -3,7 +3,7 @@
 **Version:** 1.0
 **Last Updated:** February 4, 2026
 **Application Type:** Multi-tenant SaaS for Nail Salons
-**Tech Stack:** Next.js 14, Supabase, TypeScript, Tailwind CSS
+**Tech Stack:** Next.js 16, Supabase, TypeScript, Tailwind CSS
 
 ---
 
@@ -23,7 +23,9 @@
 
 Dragica is a multi-tenant SaaS application designed for nail salons to manage their business operations and allow clients to book appointments online. Each salon (tenant) has isolated data and a customizable public booking page.
 
-**Base URL:** `http://localhost:3000` (development)
+**Production URL:** https://dragica-web-app.vercel.app
+**Repository:** https://github.com/markokuler/dragica
+**Local Development:** `http://localhost:3000`
 
 ---
 
@@ -471,25 +473,37 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 
 ## Test Environment Setup
 
-1. **Local Development:**
-   ```bash
-   cd dragica-web-app
-   npm install
-   npm run dev
-   ```
+### Production Environment
+- **URL:** https://dragica-web-app.vercel.app
+- **Admin Panel:** https://dragica-web-app.vercel.app/admin
+- **Dashboard:** https://dragica-web-app.vercel.app/dashboard
+- **Public Booking:** https://dragica-web-app.vercel.app/book/[salon-slug]
 
-2. **Environment Variables:**
-   - Copy `.env.example` to `.env.local`
-   - Configure Supabase credentials
+### Local Development
+```bash
+git clone https://github.com/markokuler/dragica.git
+cd dragica
+npm install
+npm run dev
+```
 
-3. **Test Accounts:**
-   - Admin: (create via Supabase Auth)
-   - Salon Owner: (created when admin adds salon)
+### Environment Variables
+Configure in `.env.local` (local) or Vercel Dashboard (production):
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-4. **Test Data:**
-   - Create test salon via admin panel
-   - Add services, working hours
-   - Create test bookings
+### Test Accounts
+- Admin: (create via Supabase Auth Dashboard)
+- Salon Owner: (created automatically when admin adds a salon)
+
+### Test Data Setup
+1. Log in as admin
+2. Create a test salon via admin panel
+3. Log in as salon owner
+4. Add services, working hours, blocked slots
+5. Create test bookings
+6. Test public booking page
 
 ---
 
