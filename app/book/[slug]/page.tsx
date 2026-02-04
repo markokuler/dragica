@@ -253,7 +253,7 @@ export default function BookingPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
+      <main className="container mx-auto px-4 py-8 max-w-md">
         {/* Progress Steps */}
         <div className="flex items-center justify-center gap-2 mb-8">
           {['service', 'datetime', 'contact'].map((s, i) => (
