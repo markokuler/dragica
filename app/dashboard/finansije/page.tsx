@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { Suspense, useEffect, useState, useMemo, useCallback } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -39,9 +40,9 @@ import {
 const CHART_COLORS = {
   income: '#18C6A0',      // success/teal - distinct for income
   expense: '#EF5050',     // error/red - distinct for expenses
-  axis: '#9CA3AF',        // muted-foreground
+  axis: '#B0B7C3',        // muted-foreground (updated)
   label: '#FFFFFF',       // foreground
-  grid: '#2E3545',        // border color
+  grid: '#3D4556',        // border color (updated)
 }
 
 type ChartPeriod = 'days' | 'months'
@@ -78,10 +79,22 @@ const CATEGORY_LABELS: Record<string, string> = {
 }
 
 export default function FinancesPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-8 text-muted-foreground">Učitavanje...</div>}>
+      <FinancesPageContent />
+    </Suspense>
+  )
+}
+
+function FinancesPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [entries, setEntries] = useState<FinancialEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [entryType, setEntryType] = useState<'income' | 'expense'>('income')
+  const [editingEntry, setEditingEntry] = useState<FinancialEntry | null>(null)
 
   const [formData, setFormData] = useState({
     category: '',
@@ -89,17 +102,43 @@ export default function FinancesPage() {
     description: '',
     entry_date: format(new Date(), 'yyyy-MM-dd'),
   })
-  const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('months')
+  const [chartPeriod, setChartPeriod] = useState<ChartPeriod>((searchParams.get('period') as ChartPeriod) || 'months')
   const [selectedChartDate, setSelectedChartDate] = useState<Date | null>(null)
-  const [transactionFilter, setTransactionFilter] = useState<string>('all')
-  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>('all')
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [transactionFilter, setTransactionFilter] = useState<string>(searchParams.get('month') || 'all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>((searchParams.get('type') as 'all' | 'income' | 'expense') || 'all')
+  const [categoryFilter, setCategoryFilter] = useState<string>(searchParams.get('category') || 'all')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'auto' | 'manual'>((searchParams.get('source') as 'all' | 'auto' | 'manual') || 'all')
 
   // Date filters
   const today = new Date()
   const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
   const firstDayOfWeek = new Date(today)
   firstDayOfWeek.setDate(today.getDate() - today.getDay())
+
+  // Update URL with current filters
+  const updateFiltersUrl = useCallback((newFilters: {
+    period?: ChartPeriod
+    month?: string
+    type?: 'all' | 'income' | 'expense'
+    category?: string
+    source?: 'all' | 'auto' | 'manual'
+  }) => {
+    const params = new URLSearchParams()
+    const period = newFilters.period ?? chartPeriod
+    const month = newFilters.month ?? transactionFilter
+    const type = newFilters.type ?? typeFilter
+    const category = newFilters.category ?? categoryFilter
+    const source = newFilters.source ?? sourceFilter
+
+    if (period !== 'months') params.set('period', period)
+    if (month !== 'all') params.set('month', month)
+    if (type !== 'all') params.set('type', type)
+    if (category !== 'all') params.set('category', category)
+    if (source !== 'all') params.set('source', source)
+
+    const queryString = params.toString()
+    router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false })
+  }, [router, pathname, chartPeriod, transactionFilter, typeFilter, categoryFilter, sourceFilter])
 
   useEffect(() => {
     fetchEntries()
@@ -121,8 +160,12 @@ export default function FinancesPage() {
     e.preventDefault()
 
     try {
-      const response = await fetch('/api/dashboard/finances', {
-        method: 'POST',
+      const url = editingEntry
+        ? `/api/dashboard/finances/${editingEntry.id}`
+        : '/api/dashboard/finances'
+
+      const response = await fetch(url, {
+        method: editingEntry ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: entryType,
@@ -135,6 +178,7 @@ export default function FinancesPage() {
 
       if (response.ok) {
         setDialogOpen(false)
+        setEditingEntry(null)
         setFormData({
           category: '',
           amount: '',
@@ -144,7 +188,7 @@ export default function FinancesPage() {
         fetchEntries()
       } else {
         const data = await response.json()
-        alert(data.error || 'Greška pri dodavanju unosa')
+        alert(data.error || 'Greška pri čuvanju unosa')
       }
     } catch (error) {
       console.error('Error:', error)
@@ -152,12 +196,25 @@ export default function FinancesPage() {
   }
 
   const openDialog = (type: 'income' | 'expense') => {
+    setEditingEntry(null)
     setEntryType(type)
     setFormData({
       category: '',
       amount: '',
       description: '',
       entry_date: format(new Date(), 'yyyy-MM-dd'),
+    })
+    setDialogOpen(true)
+  }
+
+  const openEditDialog = (entry: FinancialEntry) => {
+    setEditingEntry(entry)
+    setEntryType(entry.type)
+    setFormData({
+      category: entry.category,
+      amount: entry.amount.toString(),
+      description: entry.description || '',
+      entry_date: entry.entry_date,
     })
     setDialogOpen(true)
   }
@@ -295,31 +352,44 @@ export default function FinancesPage() {
       filtered = filtered.filter((e) => e.category === categoryFilter)
     }
 
+    // Filter by source (auto = has booking_id, manual = no booking_id)
+    if (sourceFilter !== 'all') {
+      if (sourceFilter === 'auto') {
+        filtered = filtered.filter((e) => e.booking_id !== null)
+      } else {
+        filtered = filtered.filter((e) => e.booking_id === null)
+      }
+    }
+
     return filtered
-  }, [entries, selectedChartDate, chartPeriod, transactionFilter, typeFilter, categoryFilter])
+  }, [entries, selectedChartDate, chartPeriod, transactionFilter, typeFilter, categoryFilter, sourceFilter])
 
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 md:space-y-6 w-full min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Finansije</h1>
-          <p className="text-muted-foreground">Pregled prihoda i rashoda</p>
+          <h1 className="text-3xl sm:text-4xl font-bold font-serif">Finansije</h1>
+          <p className="text-base sm:text-lg text-muted-foreground hidden md:block">Pregled prihoda i rashoda</p>
+          {/* Compact stats for mobile */}
+          <p className="text-sm text-muted-foreground md:hidden">
+            Ovaj mesec: <span className={`font-semibold ${monthStats.profit >= 0 ? 'text-success' : 'text-destructive'}`}>{monthStats.profit.toLocaleString('sr-RS')} RSD</span>
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => openDialog('expense')}>
-            <ArrowDownRight className="mr-2 h-4 w-4 text-destructive" />
-            Dodaj rashod
+          <Button variant="outline" className="flex-1 sm:flex-none h-10" onClick={() => openDialog('expense')}>
+            <ArrowDownRight className="mr-1 sm:mr-2 h-4 w-4 text-destructive" />
+            <span className="hidden sm:inline">Dodaj </span>Rashod
           </Button>
-          <Button onClick={() => openDialog('income')}>
-            <ArrowUpRight className="mr-2 h-4 w-4" />
-            Dodaj prihod
+          <Button className="flex-1 sm:flex-none h-10" onClick={() => openDialog('income')}>
+            <ArrowUpRight className="mr-1 sm:mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Dodaj </span>Prihod
           </Button>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats Cards - hidden on mobile */}
+      <div className="hidden md:grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Danas</CardTitle>
@@ -329,9 +399,8 @@ export default function FinancesPage() {
             <div className={`text-2xl font-bold ${todayStats.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {todayStats.profit.toLocaleString('sr-RS')} RSD
             </div>
-            <p className="text-xs text-muted-foreground">
-              Prihod: {todayStats.income.toLocaleString('sr-RS')} | Rashod:{' '}
-              {todayStats.expenses.toLocaleString('sr-RS')}
+            <p className="text-sm text-muted-foreground">
+              +{todayStats.income.toLocaleString('sr-RS')} | -{todayStats.expenses.toLocaleString('sr-RS')}
             </p>
           </CardContent>
         </Card>
@@ -345,9 +414,8 @@ export default function FinancesPage() {
             <div className={`text-2xl font-bold ${weekStats.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {weekStats.profit.toLocaleString('sr-RS')} RSD
             </div>
-            <p className="text-xs text-muted-foreground">
-              Prihod: {weekStats.income.toLocaleString('sr-RS')} | Rashod:{' '}
-              {weekStats.expenses.toLocaleString('sr-RS')}
+            <p className="text-sm text-muted-foreground">
+              +{weekStats.income.toLocaleString('sr-RS')} | -{weekStats.expenses.toLocaleString('sr-RS')}
             </p>
           </CardContent>
         </Card>
@@ -361,9 +429,8 @@ export default function FinancesPage() {
             <div className={`text-2xl font-bold ${monthStats.profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {monthStats.profit.toLocaleString('sr-RS')} RSD
             </div>
-            <p className="text-xs text-muted-foreground">
-              Prihod: {monthStats.income.toLocaleString('sr-RS')} | Rashod:{' '}
-              {monthStats.expenses.toLocaleString('sr-RS')}
+            <p className="text-sm text-muted-foreground">
+              +{monthStats.income.toLocaleString('sr-RS')} | -{monthStats.expenses.toLocaleString('sr-RS')}
             </p>
           </CardContent>
         </Card>
@@ -377,28 +444,31 @@ export default function FinancesPage() {
             <div className={`text-2xl font-bold ${calculateStats(entries).profit >= 0 ? 'text-success' : 'text-destructive'}`}>
               {calculateStats(entries).profit.toLocaleString('sr-RS')} RSD
             </div>
-            <p className="text-xs text-muted-foreground">{entries.length} unosa</p>
+            <p className="text-sm text-muted-foreground">{entries.length} unosa</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Bar Chart */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <CardTitle>Pregled finansija</CardTitle>
             <CardDescription>
-              {chartPeriod === 'days' && 'Prihodi i rashodi poslednjih 14 dana'}
-              {chartPeriod === 'months' && 'Prihodi i rashodi poslednjih 6 meseci'}
+              {chartPeriod === 'days' && 'Poslednjih 14 dana'}
+              {chartPeriod === 'months' && 'Poslednjih 6 meseci'}
               {chartPeriod === 'days' && selectedChartDate && (
                 <span className="ml-2 text-primary">
-                  • Filtrirano: {format(selectedChartDate, 'd. MMM yyyy', { locale: srLatn })}
+                  • {format(selectedChartDate, 'd. MMM', { locale: srLatn })}
                 </span>
               )}
             </CardDescription>
           </div>
-          <Select value={chartPeriod} onValueChange={(v) => setChartPeriod(v as ChartPeriod)}>
-            <SelectTrigger className="w-40">
+          <Select value={chartPeriod} onValueChange={(v) => {
+            setChartPeriod(v as ChartPeriod)
+            updateFiltersUrl({ period: v as ChartPeriod })
+          }}>
+            <SelectTrigger className="w-full sm:w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -410,12 +480,12 @@ export default function FinancesPage() {
             </SelectContent>
           </Select>
         </CardHeader>
-        <CardContent>
-          <div className="h-[300px] w-full">
+        <CardContent className="p-2 sm:p-6 pt-0">
+          <div className="h-[250px] sm:h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}
-                margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                margin={{ top: 20, right: 10, left: -10, bottom: 5 }}
                 onClick={(state) => {
                   if (state && state.activeLabel) {
                     const clickedData = chartData.find((d) => d.name === state.activeLabel)
@@ -528,17 +598,18 @@ export default function FinancesPage() {
                   </CardDescription>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                 <Select
                   value={selectedChartDate ? 'chart' : transactionFilter}
                   onValueChange={(v) => {
                     if (v !== 'chart') {
                       setSelectedChartDate(null)
                       setTransactionFilter(v)
+                      updateFiltersUrl({ month: v })
                     }
                   }}
                 >
-                  <SelectTrigger className="w-36">
+                  <SelectTrigger className="w-full sm:w-36">
                     <SelectValue placeholder="Mesec" />
                   </SelectTrigger>
                   <SelectContent>
@@ -566,8 +637,9 @@ export default function FinancesPage() {
               <Select value={typeFilter} onValueChange={(v) => {
                 setTypeFilter(v as 'all' | 'income' | 'expense')
                 setCategoryFilter('all') // Reset category when type changes
+                updateFiltersUrl({ type: v as 'all' | 'income' | 'expense', category: 'all' })
               }}>
-                <SelectTrigger className="w-32">
+                <SelectTrigger className="w-full sm:w-32">
                   <SelectValue placeholder="Tip" />
                 </SelectTrigger>
                 <SelectContent>
@@ -577,8 +649,11 @@ export default function FinancesPage() {
                 </SelectContent>
               </Select>
 
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-44">
+              <Select value={categoryFilter} onValueChange={(v) => {
+                setCategoryFilter(v)
+                updateFiltersUrl({ category: v })
+              }}>
+                <SelectTrigger className="w-full sm:w-44 col-span-2 sm:col-span-1">
                   <SelectValue placeholder="Kategorija" />
                 </SelectTrigger>
                 <SelectContent>
@@ -610,15 +685,32 @@ export default function FinancesPage() {
                 </SelectContent>
               </Select>
 
-              {(transactionFilter !== 'all' || typeFilter !== 'all' || categoryFilter !== 'all' || selectedChartDate) && (
+              <Select value={sourceFilter} onValueChange={(v) => {
+                setSourceFilter(v as 'all' | 'auto' | 'manual')
+                updateFiltersUrl({ source: v as 'all' | 'auto' | 'manual' })
+              }}>
+                <SelectTrigger className="w-full sm:w-36">
+                  <SelectValue placeholder="Izvor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Svi izvori</SelectItem>
+                  <SelectItem value="auto">Dragica</SelectItem>
+                  <SelectItem value="manual">Ručni unos</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {(transactionFilter !== 'all' || typeFilter !== 'all' || categoryFilter !== 'all' || sourceFilter !== 'all' || selectedChartDate) && (
                 <Button
                   variant="outline"
                   size="sm"
+                  className="col-span-2 sm:col-span-1 w-full sm:w-auto"
                   onClick={() => {
                     setTransactionFilter('all')
                     setTypeFilter('all')
                     setCategoryFilter('all')
+                    setSourceFilter('all')
                     setSelectedChartDate(null)
+                    router.replace(pathname, { scroll: false })
                   }}
                 >
                   Poništi filtere
@@ -632,37 +724,38 @@ export default function FinancesPage() {
               ) : filteredEntries.length === 0 ? (
                 <p className="text-center py-8 text-muted-foreground">Nema unosa</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {filteredEntries.slice(0, 20).map((entry) => (
                     <div
                       key={entry.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-secondary/50"
+                      className="flex items-center justify-between p-3 sm:p-4 rounded-lg bg-secondary/50 cursor-pointer hover:bg-secondary/70 transition-colors"
+                      onClick={() => openEditDialog(entry)}
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                         {entry.type === 'income' ? (
-                          <ArrowUpRight className="h-5 w-5 text-success" />
+                          <ArrowUpRight className="h-5 w-5 text-success flex-shrink-0" />
                         ) : (
-                          <ArrowDownRight className="h-5 w-5 text-destructive" />
+                          <ArrowDownRight className="h-5 w-5 text-destructive flex-shrink-0" />
                         )}
-                        <div>
-                          <p className="font-medium">
+                        <div className="min-w-0">
+                          <p className="font-medium text-sm sm:text-base truncate">
                             {CATEGORY_LABELS[entry.category] || entry.category}
                           </p>
                           {entry.description && (
-                            <p className="text-sm text-muted-foreground">{entry.description}</p>
+                            <p className="text-xs sm:text-sm text-muted-foreground truncate">{entry.description}</p>
                           )}
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                             {format(new Date(entry.entry_date), 'd. MMM yyyy', { locale: srLatn })}
                           </p>
                         </div>
                       </div>
                       <p
-                        className={`font-bold ${
+                        className={`font-bold text-sm sm:text-base flex-shrink-0 ml-2 ${
                           entry.type === 'income' ? 'text-success' : 'text-destructive'
                         }`}
                       >
                         {entry.type === 'income' ? '+' : '-'}
-                        {Number(entry.amount).toLocaleString('sr-RS')} RSD
+                        {Number(entry.amount).toLocaleString('sr-RS')}
                       </p>
                     </div>
                   ))}
@@ -676,10 +769,14 @@ export default function FinancesPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {entryType === 'income' ? 'Dodaj prihod' : 'Dodaj rashod'}
+              {editingEntry
+                ? (entryType === 'income' ? 'Izmeni prihod' : 'Izmeni rashod')
+                : (entryType === 'income' ? 'Dodaj prihod' : 'Dodaj rashod')}
             </DialogTitle>
             <DialogDescription>
-              Unesite detalje o {entryType === 'income' ? 'prihodu' : 'rashodu'}
+              {editingEntry
+                ? `Izmenite detalje o ${entryType === 'income' ? 'prihodu' : 'rashodu'}`
+                : `Unesite detalje o ${entryType === 'income' ? 'prihodu' : 'rashodu'}`}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
@@ -716,6 +813,7 @@ export default function FinancesPage() {
                   placeholder="0.00"
                   value={formData.amount}
                   onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
                   required
                 />
               </div>
@@ -742,11 +840,14 @@ export default function FinancesPage() {
               </div>
             </div>
 
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => {
+                setDialogOpen(false)
+                setEditingEntry(null)
+              }}>
                 Otkaži
               </Button>
-              <Button type="submit">Dodaj</Button>
+              <Button type="submit">{editingEntry ? 'Sačuvaj' : 'Dodaj'}</Button>
             </DialogFooter>
           </form>
         </DialogContent>

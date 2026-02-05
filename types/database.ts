@@ -197,9 +197,10 @@ export interface Database {
           service_id: string
           start_datetime: string
           end_datetime: string
-          status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+          status: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'noshow'
           otp_code: string | null
           otp_verified_at: string | null
+          manage_token: string | null
           created_at: string
           updated_at: string
         }
@@ -210,9 +211,10 @@ export interface Database {
           service_id: string
           start_datetime: string
           end_datetime: string
-          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'noshow'
           otp_code?: string | null
           otp_verified_at?: string | null
+          manage_token?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -223,9 +225,10 @@ export interface Database {
           service_id?: string
           start_datetime?: string
           end_datetime?: string
-          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+          status?: 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'noshow'
           otp_code?: string | null
           otp_verified_at?: string | null
+          manage_token?: string | null
           created_at?: string
           updated_at?: string
         }

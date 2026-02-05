@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getUserWithRole } from '@/lib/auth'
+import { getUserWithRole, getEffectiveTenantId } from '@/lib/auth'
+import { getStoredPhoneVariations, cleanPhoneNumber } from '@/lib/phone-utils'
 
 export async function GET(request: NextRequest) {
   try {
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
     const { searchParams } = new URL(request.url)
@@ -66,11 +71,15 @@ export async function POST(request: NextRequest) {
   try {
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
     const body = await request.json()
@@ -100,34 +109,43 @@ export async function POST(request: NextRequest) {
     const startDate = new Date(start_datetime)
     const endDate = new Date(startDate.getTime() + service.duration_minutes * 60000)
 
+    // Clean phone - expect international format from dashboard
+    const cleanedPhone = customer_phone.startsWith('+') ? customer_phone : `+${cleanPhoneNumber(customer_phone)}`
+    const phoneVariations = getStoredPhoneVariations(cleanedPhone)
+
     // Find or create customer
     let customerId: string
 
     const { data: existingCustomer } = await supabase
       .from('customers')
-      .select('id')
+      .select('id, phone')
       .eq('tenant_id', tenantId)
-      .eq('phone', customer_phone)
+      .in('phone', phoneVariations)
+      .limit(1)
       .single()
 
     if (existingCustomer) {
       customerId = existingCustomer.id
 
-      // Update customer name if provided and customer doesn't have one
-      if (customer_name) {
-        await supabase
-          .from('customers')
-          .update({ name: customer_name })
-          .eq('id', customerId)
-          .is('name', null)
+      // Update phone to international format and customer name if provided
+      const updateData: Record<string, string | null> = {
+        phone: cleanedPhone, // Always update to international format
       }
+      if (customer_name) {
+        updateData.name = customer_name
+      }
+
+      await supabase
+        .from('customers')
+        .update(updateData)
+        .eq('id', customerId)
     } else {
-      // Create new customer
+      // Create new customer with international phone
       const { data: newCustomer, error: customerError } = await supabase
         .from('customers')
         .insert({
           tenant_id: tenantId,
-          phone: customer_phone,
+          phone: cleanedPhone,
           name: customer_name || null,
         })
         .select()

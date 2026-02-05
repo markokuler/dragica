@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getUserWithRole } from '@/lib/auth'
+import { getUserWithRole, getEffectiveTenantId } from '@/lib/auth'
 
 export async function GET(
   request: NextRequest,
@@ -10,11 +10,15 @@ export async function GET(
     const { id } = await params
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
     const { data: booking, error } = await supabase
@@ -47,11 +51,15 @@ export async function PUT(
     const { id } = await params
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
     const body = await request.json()
@@ -171,13 +179,21 @@ export async function PUT(
         .eq('id', existingBooking.service_id)
         .single()
 
+      // Get customer name
+      const { data: customer } = await supabase
+        .from('customers')
+        .select('name, phone')
+        .eq('id', customerId || existingBooking.customer_id)
+        .single()
+
       if (service) {
+        const customerName = customer?.name || customer?.phone || 'Nepoznat'
         await supabase.from('financial_entries').insert({
           tenant_id: tenantId,
           type: 'income',
           category: 'booking',
           amount: service.price,
-          description: `Zakazivanje: ${service.name}`,
+          description: `Dragica: ${service.name}, ${customerName}`,
           entry_date: new Date().toISOString().split('T')[0],
           booking_id: id,
         })
@@ -199,27 +215,51 @@ export async function DELETE(
     const { id } = await params
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
-    // Instead of deleting, mark as cancelled
-    const { data: booking, error } = await supabase
-      .from('bookings')
-      .update({ status: 'cancelled' })
-      .eq('id', id)
-      .eq('tenant_id', tenantId)
-      .select()
-      .single()
+    // Check for permanent deletion query param
+    const { searchParams } = new URL(request.url)
+    const permanent = searchParams.get('permanent') === 'true'
 
-    if (error || !booking) {
-      return NextResponse.json({ error: 'Zakazivanje nije pronađeno' }, { status: 404 })
+    if (permanent) {
+      // Permanently delete the booking
+      const { error } = await supabase
+        .from('bookings')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+
+      if (error) {
+        console.error('Error deleting booking:', error)
+        return NextResponse.json({ error: 'Greška pri brisanju zakazivanja' }, { status: 500 })
+      }
+
+      return NextResponse.json({ success: true, deleted: true })
+    } else {
+      // Mark as cancelled (soft delete)
+      const { data: booking, error } = await supabase
+        .from('bookings')
+        .update({ status: 'cancelled' })
+        .eq('id', id)
+        .eq('tenant_id', tenantId)
+        .select()
+        .single()
+
+      if (error || !booking) {
+        return NextResponse.json({ error: 'Zakazivanje nije pronađeno' }, { status: 404 })
+      }
+
+      return NextResponse.json({ success: true })
     }
-
-    return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error in DELETE /api/dashboard/bookings/[id]:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

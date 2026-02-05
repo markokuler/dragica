@@ -90,6 +90,10 @@ export async function PUT(
       updateData.is_active = body.is_active
     }
 
+    if (body.admin_notes !== undefined) {
+      updateData.admin_notes = body.admin_notes || null
+    }
+
     // Update salon
     const { data: salon, error: updateError } = await supabase
       .from('tenants')

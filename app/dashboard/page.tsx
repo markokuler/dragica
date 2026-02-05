@@ -203,7 +203,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl font-bold">Kontrolna tabla</h1>
+          <h1 className="text-3xl font-bold font-serif">Tvoj pregled</h1>
           <p className="text-muted-foreground">Učitavanje...</p>
         </div>
       </div>
@@ -211,10 +211,10 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full min-w-0">
       <div>
-        <h1 className="text-3xl font-bold">Kontrolna tabla</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-3xl sm:text-4xl font-bold">Tvoj pregled</h1>
+        <p className="text-base sm:text-lg text-muted-foreground">
           Dobrodošli nazad! Evo pregleda vašeg salona.
         </p>
       </div>
@@ -224,21 +224,21 @@ export default function DashboardPage() {
         {/* Left Column */}
         <div className="space-y-4">
           {/* Stats Cards */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <Link href="/dashboard/kalendar">
               <Card className="cursor-pointer hover:bg-secondary/50 transition-colors h-full">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Zakazivanja</CardTitle>
-                  <Calendar className="h-4 w-4 text-primary" />
+                  <CardTitle className="text-base font-semibold">Zakazivanja</CardTitle>
+                  <Calendar className="h-5 w-5 text-primary" />
                 </CardHeader>
-                <CardContent className="space-y-2">
+                <CardContent className="space-y-3">
                   <div className="flex items-baseline justify-between">
-                    <p className="text-xs text-muted-foreground">Danas</p>
-                    <div className="text-2xl font-bold text-primary">{stats?.todayBookings || 0}</div>
+                    <p className="text-base text-muted-foreground">Danas</p>
+                    <div className="text-3xl font-bold font-serif text-primary">{stats?.todayBookings || 0}</div>
                   </div>
                   <div className="flex items-baseline justify-between">
-                    <p className="text-xs text-muted-foreground">Ove nedelje</p>
-                    <div className="text-2xl font-bold">{stats?.upcomingBookings || 0}</div>
+                    <p className="text-base text-muted-foreground">Ove nedelje</p>
+                    <div className="text-3xl font-bold font-serif">{stats?.upcomingBookings || 0}</div>
                   </div>
                 </CardContent>
               </Card>
@@ -247,12 +247,12 @@ export default function DashboardPage() {
             <Link href="/dashboard/klijenti">
               <Card className="cursor-pointer hover:bg-secondary/50 transition-colors h-full">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Klijenti</CardTitle>
-                  <Users className="h-4 w-4 text-chart-1" />
+                  <CardTitle className="text-base font-semibold">Klijenti</CardTitle>
+                  <Users className="h-5 w-5 text-chart-1" />
                 </CardHeader>
                 <CardContent className="flex flex-col items-center justify-center">
-                  <div className="text-4xl font-bold text-chart-1">{stats?.totalClients || 0}</div>
-                  <p className="text-xs text-muted-foreground">Ukupno u bazi</p>
+                  <div className="text-5xl font-bold text-chart-1">{stats?.totalClients || 0}</div>
+                  <p className="text-base text-muted-foreground">Ukupno u bazi</p>
                 </CardContent>
               </Card>
             </Link>
@@ -263,24 +263,24 @@ export default function DashboardPage() {
             <CardHeader className="pb-3">
               <CardTitle>Brze akcije</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start" onClick={openBookingDialog}>
-                <Plus className="mr-2 h-4 w-4" />
+            <CardContent className="grid gap-3">
+              <Button variant="outline" className="w-full justify-start h-11" onClick={openBookingDialog}>
+                <Plus className="mr-3 h-5 w-5 flex-shrink-0" />
                 Novo zakazivanje
               </Button>
-              <Button variant="outline" className="w-full justify-start" onClick={openServiceDialog}>
-                <Plus className="mr-2 h-4 w-4" />
+              <Button variant="outline" className="w-full justify-start h-11" onClick={openServiceDialog}>
+                <Plus className="mr-3 h-5 w-5 flex-shrink-0" />
                 Dodaj uslugu
               </Button>
-              <Link href="/dashboard/kalendar">
-                <Button variant="outline" className="w-full justify-start">
-                  <Calendar className="mr-2 h-4 w-4" />
+              <Link href="/dashboard/kalendar" className="block">
+                <Button variant="outline" className="w-full justify-start h-11">
+                  <Calendar className="mr-3 h-5 w-5 flex-shrink-0" />
                   Pregled kalendara
                 </Button>
               </Link>
-              <Link href="/dashboard/finansije">
-                <Button variant="outline" className="w-full justify-start">
-                  <DollarSign className="mr-2 h-4 w-4" />
+              <Link href="/dashboard/finansije" className="block">
+                <Button variant="outline" className="w-full justify-start h-11">
+                  <DollarSign className="mr-3 h-5 w-5 flex-shrink-0" />
                   Finansijski izveštaj
                 </Button>
               </Link>
@@ -290,15 +290,13 @@ export default function DashboardPage() {
 
         {/* Right Column - Upcoming Bookings (full height) */}
         <Card className="flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <div>
               <CardTitle>Predstojeći termini</CardTitle>
-              <CardDescription>
-                Naredna zakazivanja
-              </CardDescription>
+              <CardDescription>Naredna zakazivanja</CardDescription>
             </div>
             <Link href="/dashboard/kalendar">
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" className="h-9">
                 Svi termini
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -306,35 +304,38 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex-1">
             {upcomingBookings.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
+              <p className="text-base text-muted-foreground text-center py-8">
                 Nema predstojećih termina
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="divide-y divide-border">
                 {upcomingBookings.map((booking) => (
-                  <div
+                  <Link
                     key={booking.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-secondary/50"
+                    href={`/dashboard/kalendar?date=${format(new Date(booking.start_datetime), 'yyyy-MM-dd')}&booking=${booking.id}`}
+                    className="block"
                   >
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {booking.customer.name || booking.customer.phone}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {booking.service.name}
-                      </p>
+                    <div className="flex items-center py-3 hover:bg-secondary/30 transition-colors cursor-pointer -mx-6 px-6">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">
+                          {booking.customer.name || booking.customer.phone}
+                        </p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {booking.service.name}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-4">
+                        <p className="text-primary font-medium">
+                          {format(new Date(booking.start_datetime), 'HH:mm')}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {format(new Date(booking.start_datetime), 'EEE, d. MMM', {
+                            locale: srLatn,
+                          })}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-primary">
-                        {format(new Date(booking.start_datetime), 'HH:mm')}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(booking.start_datetime), 'EEE, d. MMM', {
-                          locale: srLatn,
-                        })}
-                      </p>
-                    </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             )}
@@ -436,7 +437,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <DialogFooter className="gap-2 sm:gap-0">
+              <DialogFooter className="gap-2">
                 <Button type="button" variant="outline" onClick={() => setBookingDialogOpen(false)}>
                   Otkaži
                 </Button>
@@ -478,6 +479,7 @@ export default function DashboardPage() {
                 placeholder="60"
                 value={serviceForm.duration_minutes}
                 onChange={(e) => setServiceForm({ ...serviceForm, duration_minutes: e.target.value })}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 required
               />
             </div>
@@ -492,11 +494,12 @@ export default function DashboardPage() {
                 placeholder="2000"
                 value={serviceForm.price}
                 onChange={(e) => setServiceForm({ ...serviceForm, price: e.target.value })}
+                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                 required
               />
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
+            <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={() => setServiceDialogOpen(false)}>
                 Otkaži
               </Button>

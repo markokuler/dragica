@@ -2,12 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Calendar, Clock, Phone, Check, ArrowRight, ArrowLeft } from 'lucide-react'
-import { format, addDays } from 'date-fns'
+import { Clock, ArrowLeft, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
+import DragicaLogo from '@/components/DragicaLogo'
+import { COUNTRY_CODES, formatInternationalPhone, removeLeadingZero } from '@/lib/phone-utils'
+import { format, addDays, addMonths, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isBefore, isAfter, startOfDay, isSameDay } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 
 interface Tenant {
@@ -17,7 +16,6 @@ interface Tenant {
   phone: string
   description: string | null
   logo_url: string | null
-  banner_url: string | null
   accent_color: string | null
   background_color: string | null
   text_color: string | null
@@ -33,7 +31,58 @@ interface Service {
   price: number
 }
 
-type Step = 'service' | 'datetime' | 'contact' | 'confirm'
+type Step = 'service' | 'date' | 'time' | 'contact'
+
+// Default Forest Pop color palette (fallback)
+const DEFAULT_COLORS = {
+  background: '#E4EDE6',
+  foreground: '#1B4332',
+  primary: '#2D6A4F',
+  secondary: '#C5E8CB',
+  accent: '#E76F51',
+  success: '#40916C',
+  card: '#FFFFFF',
+}
+
+// Generate colors based on tenant branding
+function getColors(tenant: Tenant | null) {
+  // Check if tenant has any custom branding
+  const hasCustomBranding = tenant?.background_color || tenant?.accent_color || tenant?.text_color
+
+  if (!hasCustomBranding) {
+    return {
+      ...DEFAULT_COLORS,
+      border: DEFAULT_COLORS.foreground,
+      headerBg: DEFAULT_COLORS.secondary,
+      cardBg: '#FFFFFF',
+      shadowColor: DEFAULT_COLORS.foreground,
+    }
+  }
+
+  const bg = tenant!.background_color || DEFAULT_COLORS.background
+  const fg = tenant!.text_color || DEFAULT_COLORS.foreground
+  const accent = tenant!.accent_color || DEFAULT_COLORS.primary
+  const isDark = tenant!.theme === 'dark'
+
+  // For dark themes, use lighter shades for contrast
+  // For light themes, use darker accent for contrast
+  const headerBg = isDark ? `${fg}15` : `${accent}25`
+  const cardBg = isDark ? `${fg}10` : '#FFFFFF'
+  const shadowColor = isDark ? fg : fg
+
+  return {
+    background: bg,
+    foreground: fg,
+    primary: accent,
+    secondary: isDark ? `${fg}20` : `${accent}20`,
+    accent: accent,
+    success: accent, // Use accent for consistency
+    card: cardBg,
+    border: fg,
+    headerBg: headerBg,
+    shadowColor: shadowColor,
+  }
+}
 
 export default function BookingPage() {
   const params = useParams()
@@ -45,6 +94,9 @@ export default function BookingPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [services, setServices] = useState<Service[]>([])
 
+  // Dynamic colors based on tenant branding
+  const colors = getColors(tenant)
+
   const [step, setStep] = useState<Step>('service')
   const [selectedService, setSelectedService] = useState<Service | null>(null)
   const [selectedDate, setSelectedDate] = useState<string>('')
@@ -52,19 +104,43 @@ export default function BookingPage() {
   const [selectedTime, setSelectedTime] = useState<string>('')
   const [loadingSlots, setLoadingSlots] = useState(false)
 
-  const [phone, setPhone] = useState('')
+  const [countryCode, setCountryCode] = useState('381') // Serbia default
+  const [phoneNumber, setPhoneNumber] = useState('')
   const [name, setName] = useState('')
+  const [notificationChannel, setNotificationChannel] = useState<'whatsapp' | 'viber' | ''>('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
-  // Generate next 14 days for date selection
-  const availableDates = Array.from({ length: 14 }, (_, i) => {
-    const date = addDays(new Date(), i + 1)
-    return {
-      value: format(date, 'yyyy-MM-dd'),
-      label: format(date, 'EEE, d. MMM', { locale: srLatn }),
-      dayName: format(date, 'EEEE', { locale: srLatn }),
-    }
-  })
+  // Calendar navigation state
+  const [currentMonth, setCurrentMonth] = useState(new Date())
+
+  // Date range: tomorrow to 3 months from now
+  const tomorrow = addDays(startOfDay(new Date()), 1)
+  const maxDate = addMonths(tomorrow, 3)
+
+  // Get days for the current month view
+  const getMonthDays = () => {
+    const start = startOfWeek(new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1), { weekStartsOn: 1 })
+    const end = endOfWeek(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0), { weekStartsOn: 1 })
+    return eachDayOfInterval({ start, end })
+  }
+
+  const monthDays = getMonthDays()
+
+  const canGoPrevMonth = () => {
+    const prevMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
+    return isAfter(new Date(prevMonth.getFullYear(), prevMonth.getMonth() + 1, 0), tomorrow)
+  }
+
+  const canGoNextMonth = () => {
+    const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
+    return isBefore(nextMonth, maxDate)
+  }
+
+  const isDateSelectable = (date: Date) => {
+    return !isBefore(date, tomorrow) && !isAfter(date, maxDate)
+  }
 
   useEffect(() => {
     fetchTenantData()
@@ -120,7 +196,12 @@ export default function BookingPage() {
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service)
-    setStep('datetime')
+    setStep('date')
+  }
+
+  const handleDateSelect = (dateStr: string) => {
+    setSelectedDate(dateStr)
+    setStep('time')
   }
 
   const handleTimeSelect = (time: string) => {
@@ -130,7 +211,18 @@ export default function BookingPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    const cleanedPhone = removeLeadingZero(phoneNumber)
+    if (!cleanedPhone || cleanedPhone.length < 6) {
+      setSubmitError('Unesite ispravan broj telefona')
+      return
+    }
+
+    // Combine country code and local number into international format
+    const fullPhone = formatInternationalPhone(countryCode, phoneNumber)
+
     setSubmitting(true)
+    setSubmitError('')
 
     try {
       const response = await fetch(`/api/public/${slug}/book`, {
@@ -140,281 +232,309 @@ export default function BookingPage() {
           service_id: selectedService?.id,
           date: selectedDate,
           time: selectedTime,
-          phone,
+          phone: fullPhone,
           name: name || null,
+          notification_channel: notificationChannel || null,
         }),
       })
 
       const data = await response.json()
 
       if (response.ok) {
-        // Redirect to confirmation page with booking ID
         router.push(`/book/${slug}/potvrda?id=${data.bookingId}`)
       } else {
-        alert(data.error || 'Greška pri zakazivanju')
+        setSubmitError(data.error || 'Greška pri zakazivanju')
       }
     } catch (err) {
-      alert('Greška pri zakazivanju')
+      setSubmitError('Greška pri zakazivanju')
     } finally {
       setSubmitting(false)
     }
   }
 
-  // Branding values with defaults
-  const accentColor = tenant?.accent_color || '#CDA661'
-  const backgroundColor = tenant?.background_color || '#181920'
-  const textColor = tenant?.text_color || '#FFFFFF'
-  const buttonStyle = tenant?.button_style || 'rounded'
-
-  // Button border radius based on style
-  const getButtonRadius = () => {
-    switch (buttonStyle) {
-      case 'pill':
-        return '9999px'
-      case 'square':
-        return '0px'
-      default:
-        return '0.5rem'
-    }
-  }
-
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor }}>
-        <p style={{ color: textColor }} className="opacity-70">Učitavanje...</p>
+      <div className="h-screen flex items-center justify-center" style={{ backgroundColor: colors.background }}>
+        <div className="text-center">
+          <div className="mx-auto mb-4 animate-bounce">
+            <DragicaLogo size="lg" />
+          </div>
+          <p className="text-lg font-bold" style={{ color: colors.foreground }}>Učitavanje...</p>
+          <p className="text-sm font-medium opacity-60 italic">Tvoja pomoćnica</p>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor }}>
-        <Card className="max-w-md">
-          <CardHeader>
-            <CardTitle>Greška</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">{error}</p>
-          </CardContent>
-        </Card>
+      <div className="h-screen flex items-center justify-center p-4" style={{ backgroundColor: colors.background }}>
+        <div className="text-center p-6 bg-white border-4 border-[#1B4332] rounded-xl shadow-[6px_6px_0px_#1B4332]">
+          <h2 className="text-2xl font-extrabold mb-2" style={{ color: colors.accent }}>Greška!</h2>
+          <p className="font-medium" style={{ color: colors.foreground }}>{error}</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor, color: textColor }}>
-      {/* Header with Banner */}
-      <header className="border-b" style={{ borderColor: accentColor + '30' }}>
-        {/* Banner Image */}
-        {tenant?.banner_url ? (
-          <div className="w-full h-32 md:h-48 overflow-hidden">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: colors.background, color: colors.foreground }}>
+
+      {/* Header */}
+      <header
+        className="shrink-0 px-4 py-4 md:py-3 relative z-10"
+        style={{
+          backgroundColor: colors.headerBg,
+          borderBottom: `4px solid ${colors.border}`,
+        }}
+      >
+        <div className="max-w-md mx-auto flex items-center gap-3">
+          {tenant?.logo_url ? (
             <img
-              src={tenant.banner_url}
-              alt="Banner"
-              className="w-full h-full object-cover"
+              src={tenant.logo_url}
+              alt="Logo"
+              className="w-12 h-12 md:w-10 md:h-10 object-contain rounded-lg"
+              style={{
+                border: `2px solid ${colors.border}`,
+                boxShadow: `2px 2px 0px ${colors.shadowColor}`,
+              }}
             />
-          </div>
-        ) : (
-          <div
-            className="w-full h-24 md:h-32"
-            style={{ backgroundColor: accentColor }}
-          />
-        )}
-
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-4">
-            {/* Logo */}
-            {tenant?.logo_url ? (
-              <img
-                src={tenant.logo_url}
-                alt="Logo"
-                className="w-16 h-16 object-contain rounded-lg"
-              />
-            ) : (
-              <div
-                className="w-16 h-16 rounded-lg flex items-center justify-center text-white text-2xl font-bold"
-                style={{ backgroundColor: accentColor }}
-              >
-                {tenant?.name?.charAt(0) || 'S'}
-              </div>
+          ) : (
+            <DragicaLogo size="sm" />
+          )}
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg md:text-base font-extrabold truncate" style={{ color: colors.foreground }}>
+              {tenant?.name}
+            </h1>
+            {tenant?.welcome_message && (
+              <p className="text-sm md:text-xs font-medium opacity-70 truncate">{tenant.welcome_message}</p>
             )}
-
-            <div>
-              <h1 className="text-2xl font-bold" style={{ color: accentColor }}>
-                {tenant?.name}
-              </h1>
-              {tenant?.welcome_message ? (
-                <p className="mt-1 opacity-70">{tenant.welcome_message}</p>
-              ) : tenant?.description ? (
-                <p className="mt-1 opacity-70">{tenant.description}</p>
-              ) : null}
-            </div>
+          </div>
+          {/* Progress dots */}
+          <div className="flex gap-2 md:gap-1.5">
+            {['service', 'date', 'time', 'contact'].map((s, i) => {
+              const steps = ['service', 'date', 'time', 'contact']
+              const currentIndex = steps.indexOf(step)
+              const isCompleted = currentIndex > i
+              const isCurrent = step === s
+              return (
+                <div
+                  key={s}
+                  className="w-3 h-3 md:w-2.5 md:h-2.5 rounded-full transition-colors"
+                  style={{
+                    border: `2px solid ${colors.border}`,
+                    backgroundColor: isCompleted ? colors.primary : isCurrent ? colors.primary : colors.card,
+                  }}
+                />
+              )
+            })}
           </div>
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-md">
-        {/* Progress Steps */}
-        <div className="flex items-center justify-center gap-2 mb-8">
-          {['service', 'datetime', 'contact'].map((s, i) => (
-            <div key={s} className="flex items-center">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  step === s || ['service', 'datetime', 'contact'].indexOf(step) > i
-                    ? 'text-white'
-                    : ''
-                }`}
-                style={{
-                  backgroundColor:
-                    step === s || ['service', 'datetime', 'contact'].indexOf(step) > i
-                      ? accentColor
-                      : backgroundColor === '#ffffff' ? '#e5e7eb' : '#374151',
-                  color:
-                    step === s || ['service', 'datetime', 'contact'].indexOf(step) > i
-                      ? '#ffffff'
-                      : textColor,
-                }}
-              >
-                {['service', 'datetime', 'contact'].indexOf(step) > i ? (
-                  <Check className="h-4 w-4" />
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col overflow-hidden relative z-10">
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-md mx-auto px-4 py-5 md:py-4">
+
+            {/* Step 1: Service Selection */}
+            {step === 'service' && (
+              <div className="space-y-4 md:space-y-3">
+                <div className="text-center mb-5 md:mb-4">
+                  <h2 className="text-2xl md:text-xl font-extrabold uppercase tracking-wide">Izaberite uslugu</h2>
+                </div>
+                {services.length === 0 ? (
+                  <p className="text-center font-medium py-8 opacity-70">Nema dostupnih usluga</p>
                 ) : (
-                  i + 1
+                  <div className="space-y-3 md:space-y-2">
+                    {services.map((service) => (
+                      <button
+                        key={service.id}
+                        onClick={() => handleServiceSelect(service)}
+                        className="w-full p-4 md:p-3 rounded-lg text-left transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[1px] active:translate-y-[1px]"
+                        style={{
+                          backgroundColor: colors.card,
+                          border: `3px solid ${colors.border}`,
+                          boxShadow: `4px 4px 0px ${colors.shadowColor}`,
+                          color: colors.foreground,
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-base md:text-sm font-bold">{service.name}</p>
+                            <p className="text-sm md:text-xs font-medium opacity-60 mt-0.5">
+                              <Clock className="inline h-3.5 w-3.5 md:h-3 md:w-3 mr-1" />
+                              {service.duration_minutes} min
+                            </p>
+                          </div>
+                          <p className="text-lg md:text-base font-extrabold" style={{ color: colors.primary }}>
+                            {service.price.toLocaleString('sr-RS')} RSD
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
-              {i < 2 && (
-                <div
-                  className="w-12 h-0.5 mx-2"
-                  style={{ backgroundColor: backgroundColor === '#ffffff' ? '#e5e7eb' : '#374151' }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
+            )}
 
-        {/* Step 1: Service Selection */}
-        {step === 'service' && (
-          <div className="space-y-4">
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-semibold">Izaberite uslugu</h2>
-              <p className="opacity-70">Koju uslugu želite da zakažete?</p>
-            </div>
+            {/* Step 2: Date Selection */}
+            {step === 'date' && selectedService && (
+              <div className="space-y-4 md:space-y-3">
+                <button
+                  onClick={() => setStep('service')}
+                  className="flex items-center gap-1 text-sm font-bold opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Nazad
+                </button>
 
-            {services.length === 0 ? (
-              <Card style={{ backgroundColor: backgroundColor === '#ffffff' ? '#f9fafb' : '#1f2937' }}>
-                <CardContent className="py-8 text-center">
-                  <p className="opacity-70">Nema dostupnih usluga</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {services.map((service) => (
-                  <Card
-                    key={service.id}
-                    className="cursor-pointer transition-all hover:shadow-md"
+                <div className="text-center">
+                  <h2 className="text-2xl md:text-xl font-extrabold uppercase tracking-wide">Izaberite datum</h2>
+                  <p className="text-sm md:text-xs font-medium opacity-60 mt-1">{selectedService.name}</p>
+                </div>
+
+                {/* Month Navigation */}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))}
+                    disabled={!canGoPrevMonth()}
+                    className="p-2 md:p-1.5 rounded-lg disabled:opacity-30 transition-all"
                     style={{
-                      backgroundColor: backgroundColor === '#ffffff' ? '#ffffff' : '#1f2937',
-                      borderColor: accentColor + '30',
+                      backgroundColor: colors.card,
+                      border: `2px solid ${colors.border}`,
+                      boxShadow: `2px 2px 0px ${colors.shadowColor}`,
                     }}
-                    onClick={() => handleServiceSelect(service)}
                   >
-                    <CardContent className="p-4 flex items-center justify-between" style={{ color: textColor }}>
-                      <div>
-                        <h3 className="font-medium">{service.name}</h3>
-                        <p className="text-sm opacity-70">
-                          <Clock className="inline h-3 w-3 mr-1" />
-                          {service.duration_minutes} min
-                        </p>
+                    <ChevronLeft className="h-5 w-5 md:h-4 md:w-4" />
+                  </button>
+                  <span className="font-bold text-base md:text-sm capitalize">
+                    {format(currentMonth, 'LLLL yyyy', { locale: srLatn })}
+                  </span>
+                  <button
+                    onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))}
+                    disabled={!canGoNextMonth()}
+                    className="p-2 md:p-1.5 rounded-lg disabled:opacity-30 transition-all"
+                    style={{
+                      backgroundColor: colors.card,
+                      border: `2px solid ${colors.border}`,
+                      boxShadow: `2px 2px 0px ${colors.shadowColor}`,
+                    }}
+                  >
+                    <ChevronRight className="h-5 w-5 md:h-4 md:w-4" />
+                  </button>
+                </div>
+
+                {/* Calendar Card */}
+                <div
+                  className="rounded-xl p-4"
+                  style={{
+                    backgroundColor: colors.card,
+                    border: `3px solid ${colors.border}`,
+                    boxShadow: `4px 4px 0px ${colors.shadowColor}`,
+                  }}
+                >
+                  {/* Weekday Headers */}
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {['P', 'U', 'S', 'Č', 'P', 'S', 'N'].map((day, i) => (
+                      <div key={i} className="text-center text-sm md:text-xs font-bold py-2 md:py-1 opacity-50">
+                        {day}
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold" style={{ color: accentColor }}>
-                          {service.price.toLocaleString('sr-RS')} RSD
-                        </p>
-                        <ArrowRight className="h-4 w-4 opacity-50 ml-auto" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                    ))}
+                  </div>
+
+                  {/* Calendar Grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {monthDays.map((day) => {
+                      const dateStr = format(day, 'yyyy-MM-dd')
+                      const isCurrentMonth = isSameMonth(day, currentMonth)
+                      const isSelectable = isDateSelectable(day)
+                      const isToday = isSameDay(day, new Date())
+
+                      return (
+                        <button
+                          key={dateStr}
+                          onClick={() => isSelectable && isCurrentMonth && handleDateSelect(dateStr)}
+                          disabled={!isSelectable || !isCurrentMonth}
+                          className="aspect-square flex items-center justify-center text-base md:text-sm rounded-lg transition-all disabled:cursor-not-allowed font-bold"
+                          style={{
+                            backgroundColor: isToday ? colors.headerBg : 'transparent',
+                            border: isToday ? `2px solid ${colors.border}` : 'none',
+                            color: !isCurrentMonth || !isSelectable ? `${colors.foreground}40` : colors.foreground,
+                          }}
+                          onMouseEnter={(e) => {
+                            if (isSelectable && isCurrentMonth) {
+                              e.currentTarget.style.backgroundColor = colors.primary
+                              e.currentTarget.style.color = '#FFFFFF'
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (isSelectable && isCurrentMonth) {
+                              e.currentTarget.style.backgroundColor = isToday ? colors.headerBg : 'transparent'
+                              e.currentTarget.style.color = colors.foreground
+                            }
+                          }}
+                        >
+                          {format(day, 'd')}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             )}
-          </div>
-        )}
 
-        {/* Step 2: Date & Time Selection */}
-        {step === 'datetime' && selectedService && (
-          <div className="space-y-6">
-            <Button
-              variant="ghost"
-              onClick={() => setStep('service')}
-              className="mb-2"
-              style={{ color: textColor }}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Nazad
-            </Button>
+            {/* Step 3: Time Selection */}
+            {step === 'time' && selectedService && selectedDate && (
+              <div className="space-y-4 md:space-y-3">
+                <button
+                  onClick={() => { setSelectedTime(''); setStep('date') }}
+                  className="flex items-center gap-1 text-sm font-bold opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Nazad
+                </button>
 
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-semibold">Izaberite termin</h2>
-              <p className="opacity-70">
-                {selectedService.name} • {selectedService.duration_minutes} min
-              </p>
-            </div>
+                <div className="text-center">
+                  <h2 className="text-2xl md:text-xl font-extrabold uppercase tracking-wide">Izaberite vreme</h2>
+                  <p className="text-sm md:text-xs font-medium opacity-60 mt-1">
+                    {format(new Date(selectedDate), 'EEEE, d. MMM', { locale: srLatn })}
+                  </p>
+                </div>
 
-            {/* Date Selection */}
-            <div>
-              <Label className="mb-2 block">Datum</Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {availableDates.map((date) => (
-                  <button
-                    key={date.value}
-                    className="h-auto py-3 flex flex-col items-center border transition-all"
-                    style={{
-                      backgroundColor:
-                        selectedDate === date.value
-                          ? accentColor
-                          : backgroundColor === '#ffffff' ? '#ffffff' : '#1f2937',
-                      color: selectedDate === date.value ? '#ffffff' : textColor,
-                      borderColor: selectedDate === date.value ? accentColor : accentColor + '30',
-                      borderRadius: getButtonRadius(),
-                    }}
-                    onClick={() => setSelectedDate(date.value)}
-                  >
-                    <span className="text-xs opacity-70">{date.dayName}</span>
-                    <span className="font-medium">{date.label.split(', ')[1]}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Time Selection */}
-            {selectedDate && (
-              <div>
-                <Label className="mb-2 block">Vreme</Label>
                 {loadingSlots ? (
-                  <p className="text-center py-8 opacity-70">Učitavanje termina...</p>
+                  <p className="text-center py-8 font-bold opacity-70">Učitavanje...</p>
                 ) : availableSlots.length === 0 ? (
-                  <Card style={{ backgroundColor: backgroundColor === '#ffffff' ? '#f9fafb' : '#1f2937' }}>
-                    <CardContent className="py-8 text-center">
-                      <p className="opacity-70">
-                        Nema dostupnih termina za ovaj dan
-                      </p>
-                    </CardContent>
-                  </Card>
+                  <div
+                    className="text-center py-8 rounded-xl p-6"
+                    style={{
+                      backgroundColor: colors.card,
+                      border: `3px solid ${colors.border}`,
+                      boxShadow: `4px 4px 0px ${colors.shadowColor}`,
+                    }}
+                  >
+                    <p className="font-bold opacity-70 mb-3">Nema dostupnih termina</p>
+                    <button
+                      onClick={() => setStep('date')}
+                      className="text-base md:text-sm font-bold underline"
+                      style={{ color: colors.primary }}
+                    >
+                      Izaberite drugi datum
+                    </button>
+                  </div>
                 ) : (
-                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
                     {availableSlots.map((time) => (
                       <button
                         key={time}
-                        className="py-2 px-3 text-sm border transition-all"
-                        style={{
-                          backgroundColor:
-                            selectedTime === time
-                              ? accentColor
-                              : backgroundColor === '#ffffff' ? '#ffffff' : '#1f2937',
-                          color: selectedTime === time ? '#ffffff' : textColor,
-                          borderColor: selectedTime === time ? accentColor : accentColor + '30',
-                          borderRadius: getButtonRadius(),
-                        }}
                         onClick={() => handleTimeSelect(time)}
+                        className="py-3.5 md:py-2.5 text-base md:text-sm font-bold rounded-lg transition-all hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[1px] active:translate-y-[1px]"
+                        style={{
+                          backgroundColor: colors.card,
+                          border: `2px solid ${colors.border}`,
+                          boxShadow: `3px 3px 0px ${colors.shadowColor}`,
+                          color: colors.foreground,
+                        }}
                       >
                         {time}
                       </button>
@@ -423,106 +543,208 @@ export default function BookingPage() {
                 )}
               </div>
             )}
-          </div>
-        )}
 
-        {/* Step 3: Contact Info */}
-        {step === 'contact' && selectedService && selectedDate && selectedTime && (
-          <div className="space-y-6">
-            <Button
-              variant="ghost"
-              onClick={() => setStep('datetime')}
-              className="mb-2"
-              style={{ color: textColor }}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Nazad
-            </Button>
+            {/* Step 4: Contact Info */}
+            {step === 'contact' && selectedService && selectedDate && selectedTime && (
+              <div className="space-y-4 md:space-y-3">
+                <button
+                  onClick={() => setStep('time')}
+                  className="flex items-center gap-1 text-sm font-bold opacity-70 hover:opacity-100 transition-opacity"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Nazad
+                </button>
 
-            <div className="text-center mb-4">
-              <h2 className="text-xl font-semibold">Vaši podaci</h2>
-              <p className="opacity-70">Unesite kontakt informacije</p>
-            </div>
-
-            {/* Booking Summary */}
-            <Card style={{ backgroundColor: backgroundColor === '#ffffff' ? '#f9fafb' : '#1f2937' }}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
-                  <Calendar className="h-10 w-10" style={{ color: accentColor }} />
-                  <div>
-                    <p className="font-medium">{selectedService.name}</p>
-                    <p className="text-sm opacity-70">
-                      {format(new Date(selectedDate), 'EEEE, d. MMMM yyyy', { locale: srLatn })}
-                    </p>
-                    <p className="text-sm opacity-70">
-                      {selectedTime} • {selectedService.duration_minutes} min •{' '}
+                {/* Summary */}
+                <div
+                  className="p-4 md:p-3 rounded-xl"
+                  style={{
+                    backgroundColor: colors.headerBg,
+                    border: `3px solid ${colors.border}`,
+                    boxShadow: `4px 4px 0px ${colors.shadowColor}`,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-base md:text-sm font-bold">{selectedService.name}</span>
+                    <span className="text-base md:text-sm font-extrabold" style={{ color: colors.primary }}>
                       {selectedService.price.toLocaleString('sr-RS')} RSD
-                    </p>
+                    </span>
                   </div>
+                  <p className="text-sm md:text-xs font-medium opacity-70 mt-1">
+                    {format(new Date(selectedDate), 'EEE, d. MMM', { locale: srLatn })} u {selectedTime}
+                  </p>
                 </div>
-              </CardContent>
-            </Card>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="phone">Broj telefona *</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+381 60 123 4567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  style={{
-                    backgroundColor: backgroundColor === '#ffffff' ? '#ffffff' : '#1f2937',
-                    borderColor: accentColor + '30',
-                    color: textColor,
-                  }}
-                />
-                <p className="text-xs opacity-70">
-                  Poslaćemo vam SMS sa potvrdom
-                </p>
+                <form onSubmit={handleSubmit} className="space-y-4 md:space-y-3">
+                  {/* Phone & Name */}
+                  <div className="space-y-3 md:space-y-2">
+                    <div>
+                      <label className="text-sm md:text-xs font-bold uppercase tracking-wide mb-1.5 md:mb-1 block">Telefon *</label>
+                      <div className="flex gap-2">
+                        {/* Country Code Dropdown */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                            className="h-12 md:h-10 px-3 flex items-center gap-1 rounded-lg font-bold text-sm min-w-[90px] justify-between"
+                            style={{
+                              backgroundColor: colors.card,
+                              border: `2px solid ${colors.border}`,
+                              boxShadow: `3px 3px 0px ${colors.shadowColor}`,
+                              color: colors.foreground,
+                            }}
+                          >
+                            <span>
+                              {COUNTRY_CODES.find(c => c.code === countryCode)?.flag} +{countryCode}
+                            </span>
+                            <ChevronDown className="w-4 h-4 opacity-60" />
+                          </button>
+                          {showCountryDropdown && (
+                            <div
+                              className="absolute top-full left-0 mt-1 w-56 max-h-60 overflow-auto rounded-lg z-50"
+                              style={{
+                                backgroundColor: colors.card,
+                                border: `2px solid ${colors.border}`,
+                                boxShadow: `4px 4px 0px ${colors.shadowColor}`,
+                              }}
+                            >
+                              {COUNTRY_CODES.map((c) => (
+                                <button
+                                  key={c.code}
+                                  type="button"
+                                  onClick={() => {
+                                    setCountryCode(c.code)
+                                    setShowCountryDropdown(false)
+                                  }}
+                                  className="w-full px-3 py-2 text-left text-sm font-medium flex items-center gap-2"
+                                  style={{
+                                    backgroundColor: countryCode === c.code ? colors.headerBg : 'transparent',
+                                    color: colors.foreground,
+                                  }}
+                                >
+                                  <span>{c.flag}</span>
+                                  <span className="font-bold">+{c.code}</span>
+                                  <span className="opacity-60">{c.country}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {/* Phone Number Input */}
+                        <Input
+                          type="tel"
+                          placeholder="60 123 4567"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          required
+                          className="flex-1 h-12 md:h-10 text-base md:text-sm font-medium"
+                          style={{
+                            backgroundColor: colors.card,
+                            border: `2px solid ${colors.border}`,
+                            boxShadow: `3px 3px 0px ${colors.shadowColor}`,
+                            color: colors.foreground,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs opacity-60 mt-1 font-medium">Sa ili bez početne nule (060... ili 60...)</p>
+                    </div>
+                    <div>
+                      <label className="text-sm md:text-xs font-bold uppercase tracking-wide mb-1.5 md:mb-1 block">Ime (opciono)</label>
+                      <Input
+                        placeholder="Vaše ime"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        className="h-12 md:h-10 text-base md:text-sm font-medium"
+                        style={{
+                          backgroundColor: colors.card,
+                          border: `2px solid ${colors.border}`,
+                          boxShadow: `3px 3px 0px ${colors.shadowColor}`,
+                          color: colors.foreground,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Channel Selection - Optional */}
+                  <div>
+                    <label className="text-sm md:text-xs font-bold uppercase tracking-wide mb-2 md:mb-1.5 block">Pošalji potvrdu putem (opciono)</label>
+                    <div className="grid grid-cols-2 gap-3 md:gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNotificationChannel(notificationChannel === 'whatsapp' ? '' : 'whatsapp')}
+                        className="flex items-center justify-center gap-2 py-3.5 md:py-2.5 rounded-lg text-base md:text-sm font-bold transition-all"
+                        style={{
+                          backgroundColor: notificationChannel === 'whatsapp' ? '#25D366' : colors.card,
+                          color: notificationChannel === 'whatsapp' ? '#FFFFFF' : colors.foreground,
+                          border: `3px solid ${colors.border}`,
+                          boxShadow: `3px 3px 0px ${colors.shadowColor}`,
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 md:h-4 md:w-4" fill="currentColor">
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                        </svg>
+                        WhatsApp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNotificationChannel(notificationChannel === 'viber' ? '' : 'viber')}
+                        className="flex items-center justify-center gap-2 py-3.5 md:py-2.5 rounded-lg text-base md:text-sm font-bold transition-all"
+                        style={{
+                          backgroundColor: notificationChannel === 'viber' ? '#7360F2' : colors.card,
+                          color: notificationChannel === 'viber' ? '#FFFFFF' : colors.foreground,
+                          border: `3px solid ${colors.border}`,
+                          boxShadow: `3px 3px 0px ${colors.shadowColor}`,
+                        }}
+                      >
+                        <svg viewBox="0 0 24 24" className="h-5 w-5 md:h-4 md:w-4" fill="currentColor">
+                          <path d="M11.398.002C9.473.028 5.331.344 3.014 2.467 1.294 4.182.518 6.792.434 10.049c-.084 3.256-.19 9.365 5.752 11.091l.007.001s-.007 1.317-.007 1.771c0 0-.063.866.518 1.052.55.186.916-.348 1.468-.932.303-.32.723-.793 1.04-1.155 2.86.252 5.063-.293 5.32-.384.58-.187 3.86-.602 4.394-4.903.555-4.464-.258-7.273-1.715-8.552-.084-.093-.163-.18-.253-.27l.003-.003c-.587-.589-3.098-2.584-8.35-2.756 0 0-.415-.028-1.213-.007zm.133 1.765c.686-.013 1.055.01 1.055.01 4.357.143 6.531 1.72 7.033 2.235.075.073.141.147.216.22h.002c1.175 1.038 1.871 3.538 1.395 7.346-.427 3.487-3.054 3.8-3.537 3.955-.207.072-2.102.54-4.495.38 0 0-1.78 2.155-2.336 2.715-.09.09-.196.134-.27.12-.105-.018-.134-.123-.133-.27l.015-2.938-.001-.003c-4.818-1.397-4.538-6.582-4.473-9.16.066-2.577.633-4.713 2.041-6.096 1.95-1.713 5.507-2.18 7.377-2.316.127-.1.27-.015.406-.015-.036-.022-.036-.064-.026-.093h.001c-.1.006-.168.022-.27.028zm1.167 2.348c-.11 0-.2.09-.2.2 0 .11.09.2.2.2 1.54.014 2.88.58 3.9 1.612 1.03 1.018 1.61 2.364 1.64 3.868.001.11.09.198.2.198h.01c.11 0 .2-.09.198-.2-.032-1.62-.666-3.073-1.777-4.196-1.1-1.11-2.554-1.728-4.17-1.742-.006 0-.006.06-.002.06zm-3.5 1.15c-.156-.004-.326.013-.495.05-.556.13-.96.395-.972.405-.41.29-.74.633-.997 1.003-.256.37-.442.794-.567 1.21-.062.208-.1.414-.1.616 0 .253.055.496.16.728.16.34.367.74.617 1.189.518.94 1.192 2.038 2.06 2.946.16.17.325.34.508.516.184.176.38.352.595.528.9.762 2.024 1.385 3.054 1.885.534.256.998.454 1.376.595.233.094.477.184.73.264.253.08.52.146.804.146h.05c.206-.008.4-.05.58-.11.36-.124.69-.333.95-.605l.01-.01c.11-.12.21-.246.29-.378.08-.13.14-.27.17-.41.03-.15.04-.3.01-.45-.03-.15-.1-.29-.21-.4l-.023-.02c-.32-.298-.66-.557-.99-.788-.35-.23-.71-.43-1.04-.573-.126-.053-.31-.08-.5-.07-.188.01-.38.06-.534.18l-.64.49c-.174.14-.404.15-.59.07 0 0-.766-.34-1.567-.898-.802-.557-1.63-1.33-1.888-2.024-.04-.12-.02-.26.09-.37l.434-.48c.11-.12.17-.27.19-.42.02-.15-.003-.3-.07-.44-.16-.345-.372-.72-.6-1.09-.23-.37-.48-.73-.72-1.04-.12-.15-.27-.27-.43-.34-.16-.07-.33-.1-.5-.1h.01zm3.17.627c-.11 0-.198.09-.198.2 0 .11.088.2.198.2.96.008 1.797.37 2.457 1.016.658.647 1.043 1.51 1.057 2.455.002.11.093.198.202.198h.008c.11-.002.198-.092.197-.202-.015-1.06-.448-2.03-1.184-2.77-.73-.74-1.68-1.167-2.737-1.177v.08zm.313 1.418c-.11-.006-.204.08-.21.19-.005.11.08.204.19.21.52.034.96.25 1.29.595.32.345.51.81.51 1.325 0 .11.09.2.2.2.11 0 .2-.09.2-.2 0-.63-.23-1.2-.62-1.63-.4-.43-.94-.68-1.56-.72v.03z"/>
+                        </svg>
+                        Viber
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Error */}
+                  {submitError && (
+                    <div
+                      className="p-3 md:p-2 rounded-lg text-sm md:text-xs text-center font-bold text-white"
+                      style={{
+                        backgroundColor: '#E76F51',
+                        border: `3px solid ${colors.border}`,
+                        boxShadow: `3px 3px 0px ${colors.shadowColor}`,
+                      }}
+                    >
+                      {submitError}
+                    </div>
+                  )}
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    className="w-full py-3.5 md:py-2.5 text-base md:text-sm font-bold rounded-lg transition-all disabled:opacity-50 hover:translate-x-[-1px] hover:translate-y-[-1px] active:translate-x-[1px] active:translate-y-[1px] uppercase tracking-wide"
+                    style={{
+                      backgroundColor: colors.primary,
+                      color: '#FFFFFF',
+                      border: `3px solid ${colors.border}`,
+                      boxShadow: `4px 4px 0px ${colors.shadowColor}`,
+                    }}
+                    disabled={submitting || !phoneNumber}
+                  >
+                    {submitting ? 'Zakazivanje...' : 'Zakaži termin'}
+                  </button>
+                </form>
               </div>
+            )}
 
-              <div className="space-y-2">
-                <Label htmlFor="name">Ime (opciono)</Label>
-                <Input
-                  id="name"
-                  placeholder="Vaše ime"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  style={{
-                    backgroundColor: backgroundColor === '#ffffff' ? '#ffffff' : '#1f2937',
-                    borderColor: accentColor + '30',
-                    color: textColor,
-                  }}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 font-medium text-white transition-opacity disabled:opacity-50"
-                style={{
-                  backgroundColor: accentColor,
-                  borderRadius: getButtonRadius(),
-                }}
-                disabled={submitting}
-              >
-                {submitting ? 'Zakazivanje...' : 'Zakaži termin'}
-              </button>
-            </form>
           </div>
-        )}
+        </div>
       </main>
 
       {/* Footer */}
-      <footer className="border-t mt-auto py-6" style={{ borderColor: accentColor + '30' }}>
-        <div className="container mx-auto px-4 text-center text-sm opacity-70">
-          <p>
-            <Phone className="inline h-3 w-3 mr-1" />
-            {tenant?.phone} • {tenant?.email}
-          </p>
-          <p className="mt-2">Powered by Dragica</p>
+      <footer className="shrink-0 py-3 md:py-2 text-center relative z-10">
+        <div className="inline-flex items-center gap-2 text-sm md:text-xs font-bold opacity-50">
+          <DragicaLogo size="xs" className="opacity-70" />
+          Dragica — Tvoja pomoćnica
         </div>
       </footer>
     </div>

@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getUserWithRole } from '@/lib/auth'
+import { getUserWithRole, getEffectiveTenantId } from '@/lib/auth'
+import { getStoredPhoneVariations, cleanPhoneNumber } from '@/lib/phone-utils'
 
 export async function GET(request: NextRequest) {
   try {
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
     const { searchParams } = new URL(request.url)
@@ -25,7 +30,15 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     if (search) {
-      query = query.or(`phone.ilike.%${search}%,name.ilike.%${search}%`)
+      // For phone search, also check variations
+      const isPhoneSearch = /^\+?\d+$/.test(search.replace(/[\s\-()]/g, ''))
+      if (isPhoneSearch) {
+        const phoneVariations = getStoredPhoneVariations(search)
+        const phoneConditions = phoneVariations.map(v => `phone.ilike.%${v}%`).join(',')
+        query = query.or(`${phoneConditions},name.ilike.%${search}%`)
+      } else {
+        query = query.or(`phone.ilike.%${search}%,name.ilike.%${search}%`)
+      }
     }
 
     const { data: clients, error } = await query
@@ -87,11 +100,15 @@ export async function POST(request: NextRequest) {
   try {
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
     const body = await request.json()
@@ -101,12 +118,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Telefon je obavezan' }, { status: 400 })
     }
 
-    // Check if client with this phone already exists
+    // Clean phone number - expect international format from dashboard
+    const cleanedPhone = phone.startsWith('+') ? phone : `+${cleanPhoneNumber(phone)}`
+    const phoneVariations = getStoredPhoneVariations(cleanedPhone)
+
+    // Check if client with this phone already exists (check all variations)
     const { data: existing } = await supabase
       .from('customers')
       .select('id')
       .eq('tenant_id', tenantId)
-      .eq('phone', phone)
+      .in('phone', phoneVariations)
+      .limit(1)
       .single()
 
     if (existing) {
@@ -117,7 +139,7 @@ export async function POST(request: NextRequest) {
       .from('customers')
       .insert({
         tenant_id: tenantId,
-        phone,
+        phone: cleanedPhone, // Store in international format
         name: name || null,
       })
       .select()

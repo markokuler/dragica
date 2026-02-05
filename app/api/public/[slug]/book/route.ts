@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { sendBookingConfirmation, NotificationChannel } from '@/lib/infobip/client'
+import { getStoredPhoneVariations, cleanPhoneNumber } from '@/lib/phone-utils'
+import { format } from 'date-fns'
+import { srLatn } from 'date-fns/locale/sr-Latn'
+import { randomUUID } from 'crypto'
 
 export async function POST(
   request: NextRequest,
@@ -10,7 +15,7 @@ export async function POST(
     const supabase = createAdminClient()
 
     const body = await request.json()
-    const { service_id, date, time, phone, name } = body
+    const { service_id, date, time, phone, name, notification_channel } = body
 
     // Validate required fields
     if (!service_id || !date || !time || !phone) {
@@ -20,10 +25,16 @@ export async function POST(
       )
     }
 
+    // Notification channel is optional
+    const validChannels: NotificationChannel[] = ['whatsapp', 'viber']
+    const channel: NotificationChannel | null = notification_channel && validChannels.includes(notification_channel)
+      ? notification_channel
+      : null
+
     // Get tenant
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')
-      .select('id, is_active')
+      .select('id, is_active, name, phone')
       .or(`slug.eq.${slug},subdomain.eq.${slug}`)
       .single()
 
@@ -34,7 +45,7 @@ export async function POST(
     // Get service
     const { data: service, error: serviceError } = await supabase
       .from('services')
-      .select('id, duration_minutes, price')
+      .select('id, name, duration_minutes, price')
       .eq('id', service_id)
       .eq('tenant_id', tenant.id)
       .eq('is_active', true)
@@ -87,34 +98,44 @@ export async function POST(
       )
     }
 
-    // Find or create customer
+    // Phone is already in international format (+381...) from frontend
+    // Clean it just in case and get variations for lookup
+    const cleanedPhone = phone.startsWith('+') ? phone : `+${cleanPhoneNumber(phone)}`
+    const phoneVariations = getStoredPhoneVariations(cleanedPhone)
+
+    // Find or create customer - search by all phone variations
     let customerId: string
 
     const { data: existingCustomer } = await supabase
       .from('customers')
-      .select('id')
+      .select('id, phone')
       .eq('tenant_id', tenant.id)
-      .eq('phone', phone)
+      .in('phone', phoneVariations)
+      .limit(1)
       .single()
 
     if (existingCustomer) {
       customerId = existingCustomer.id
 
-      // Update name if provided
-      if (name) {
-        await supabase
-          .from('customers')
-          .update({ name })
-          .eq('id', customerId)
-          .is('name', null)
+      // Update phone to international format, name and notification channel if provided
+      const updateData: Record<string, string | null> = {
+        phone: cleanedPhone, // Always update to international format
       }
+      if (name) updateData.name = name
+      if (channel) updateData.notification_channel = channel
+
+      await supabase
+        .from('customers')
+        .update(updateData)
+        .eq('id', customerId)
     } else {
       const { data: newCustomer, error: customerError } = await supabase
         .from('customers')
         .insert({
           tenant_id: tenant.id,
-          phone,
+          phone: cleanedPhone, // Store in international format
           name: name || null,
+          notification_channel: channel,
         })
         .select()
         .single()
@@ -129,8 +150,8 @@ export async function POST(
       customerId = newCustomer.id
     }
 
-    // Generate OTP code (for future SMS verification)
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString()
+    // Generate unique manage token for client to modify/cancel booking
+    const manageToken = randomUUID()
 
     // Create booking
     const { data: booking, error: bookingError } = await supabase
@@ -141,9 +162,8 @@ export async function POST(
         customer_id: customerId,
         start_datetime: startDatetime.toISOString(),
         end_datetime: endDatetime.toISOString(),
-        status: 'confirmed', // Auto-confirm for now (until SMS OTP is implemented)
-        otp_code: otpCode,
-        otp_verified_at: new Date().toISOString(), // Auto-verify for now
+        status: 'confirmed',
+        manage_token: manageToken,
       })
       .select()
       .single()
@@ -156,8 +176,32 @@ export async function POST(
       )
     }
 
-    // TODO: Send SMS confirmation when Twilio is configured
-    // await sendSMS(phone, `Vaš termin je zakazan za ${date} u ${time}. Kod: ${otpCode}`)
+    // Send notification via WhatsApp or Viber if channel is selected
+    if (channel) {
+      try {
+        const formattedDate = format(startDatetime, 'EEEE, d. MMMM yyyy', { locale: srLatn })
+        const formattedTime = format(startDatetime, 'HH:mm')
+
+        // Build manage link for client to modify/cancel booking
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${request.headers.get('host')}`
+        const manageLink = `${baseUrl}/book/${slug}/izmena/${manageToken}`
+
+        await sendBookingConfirmation({
+          to: cleanedPhone,
+          channel,
+          customerName: name || undefined,
+          serviceName: service.name,
+          date: formattedDate,
+          time: formattedTime,
+          salonName: tenant.name,
+          salonPhone: tenant.phone || undefined,
+          manageLink,
+        })
+      } catch (notificationError) {
+        // Log but don't fail the booking if notification fails
+        console.error('Failed to send booking notification:', notificationError)
+      }
+    }
 
     return NextResponse.json({
       bookingId: booking.id,

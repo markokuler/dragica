@@ -1,0 +1,186 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* Font - Neon Glass Theme */
+  --font-sans: var(--font-outfit), system-ui, sans-serif;
+  --font-serif: var(--font-clash), var(--font-outfit), sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --font-family-serif: var(--font-clash), var(--font-outfit), sans-serif;
+
+  /* ═══════════════════════════════════════════════════════════
+     NEON GLASS THEME
+     Dark base + Neon accents + Glassmorphism
+     Bold, Modern, Powerful
+     ═══════════════════════════════════════════════════════════ */
+
+  /* Core Colors */
+  --color-background: #0A0A0F;
+  --color-foreground: #F4F4F5;
+
+  --color-card: rgba(20, 20, 30, 0.7);
+  --color-card-foreground: #F4F4F5;
+
+  --color-popover: rgba(25, 25, 40, 0.9);
+  --color-popover-foreground: #F4F4F5;
+
+  /* Primary - Neon Cyan/Teal */
+  --color-primary: #00D9FF;
+  --color-primary-foreground: #0A0A0F;
+
+  /* Secondary - Deep Purple Glass */
+  --color-secondary: rgba(139, 92, 246, 0.15);
+  --color-secondary-foreground: #E4E4E7;
+
+  /* Muted */
+  --color-muted: rgba(30, 30, 45, 0.8);
+  --color-muted-foreground: #A1A1AA;
+
+  /* Accent - Neon Magenta */
+  --color-accent: #FF00E5;
+  --color-accent-foreground: #F4F4F5;
+
+  /* Destructive - Neon Red */
+  --color-destructive: #FF3366;
+  --color-destructive-foreground: #F4F4F5;
+
+  /* Borders & Input */
+  --color-border: rgba(255, 255, 255, 0.1);
+  --color-input: rgba(20, 20, 30, 0.6);
+  --color-input-border: rgba(255, 255, 255, 0.15);
+  --color-ring: #00D9FF;
+
+  /* Status Colors - Neon Version */
+  --color-success: #00FF88;
+  --color-warning: #FFB800;
+  --color-info: #00D9FF;
+  --color-error: #FF3366;
+
+  /* Booking Status Colors - Neon */
+  --color-status-pending: #FFB800;
+  --color-status-confirmed: #00D9FF;
+  --color-status-completed: #00FF88;
+  --color-status-cancelled: #FF3366;
+  --color-status-noshow: #8B5CF6;
+
+  /* Legacy aliases */
+  --color-started: #8B5CF6;
+  --color-pending: #FFB800;
+
+  /* Chart Colors - Neon Palette */
+  --color-chart-1: #00D9FF;
+  --color-chart-2: #FF00E5;
+  --color-chart-3: #00FF88;
+  --color-chart-4: #FFB800;
+  --color-chart-5: #8B5CF6;
+
+  /* Sidebar */
+  --color-sidebar: rgba(8, 8, 15, 0.95);
+  --color-sidebar-foreground: #F4F4F5;
+  --color-sidebar-primary: #00D9FF;
+  --color-sidebar-primary-foreground: #0A0A0F;
+  --color-sidebar-accent: rgba(0, 217, 255, 0.1);
+  --color-sidebar-accent-foreground: #00D9FF;
+  --color-sidebar-border: rgba(255, 255, 255, 0.08);
+  --color-sidebar-ring: #00D9FF;
+
+  /* Radius */
+  --radius: 0.75rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-image:
+      radial-gradient(ellipse at 20% 20%, rgba(0, 217, 255, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(139, 92, 246, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 50%, rgba(255, 0, 229, 0.03) 0%, transparent 70%);
+    background-attachment: fixed;
+  }
+}
+
+@layer components {
+  /* Glass Card Effect */
+  .glass {
+    background: rgba(20, 20, 30, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-hover:hover {
+    background: rgba(25, 25, 40, 0.7);
+    border-color: rgba(0, 217, 255, 0.3);
+    box-shadow: 0 0 20px rgba(0, 217, 255, 0.1);
+  }
+
+  /* Neon Glow Effects */
+  .neon-glow {
+    box-shadow: 0 0 20px rgba(0, 217, 255, 0.3),
+                0 0 40px rgba(0, 217, 255, 0.1);
+  }
+
+  .neon-glow-magenta {
+    box-shadow: 0 0 20px rgba(255, 0, 229, 0.3),
+                0 0 40px rgba(255, 0, 229, 0.1);
+  }
+
+  /* Button Glow on Hover */
+  .btn-glow {
+    transition: all 0.3s ease;
+  }
+
+  .btn-glow:hover {
+    box-shadow: 0 0 20px rgba(0, 217, 255, 0.5),
+                0 0 40px rgba(0, 217, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .btn-glow:active {
+    transform: translateY(0);
+    box-shadow: 0 0 10px rgba(0, 217, 255, 0.3);
+  }
+
+  /* Input Focus Glow */
+  .input-glow:focus {
+    border-color: rgba(0, 217, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(0, 217, 255, 0.1),
+                0 0 20px rgba(0, 217, 255, 0.1);
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+  }
+
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, #00D9FF, #FF00E5, #8B5CF6);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .gradient-border:hover::before {
+    opacity: 1;
+  }
+}

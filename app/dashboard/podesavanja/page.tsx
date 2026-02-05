@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { Suspense, useEffect, useState, useRef } from 'react'
+import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -15,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Save, ExternalLink, Copy, Check, Upload, X, Eye, Palette, Image, Type, Settings, Paintbrush, Clock, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Save, ExternalLink, Copy, Check, Upload, X, Eye, Palette, Image, Type, Settings, Paintbrush, Clock, Plus, Pencil, Trash2, CheckCircle2, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 
@@ -30,7 +31,6 @@ interface Salon {
   accent_color: string | null
   is_active: boolean
   logo_url: string | null
-  banner_url: string | null
   background_color: string | null
   text_color: string | null
   button_style: string | null
@@ -65,44 +65,55 @@ const DAYS_FULL = ['Nedelja', 'Ponedeljak', 'Utorak', 'Sreda', 'Četvrtak', 'Pet
 
 const COLOR_THEMES = [
   {
-    name: 'Zlatna',
-    accent: '#CDA661',
-    light: { bg: '#ffffff', text: '#1a1a1a' },
-    dark: { bg: '#181920', text: '#ffffff' }
+    name: 'Šumska',
+    accent: '#2D6A4F',
+    light: { bg: '#E4EDE6', text: '#1B4332' },
+    dark: { bg: '#1B4332', text: '#E4EDE6' }
   },
   {
-    name: 'Ljubičasta',
-    accent: '#6054BA',
-    light: { bg: '#ffffff', text: '#1a1a1a' },
-    dark: { bg: '#181920', text: '#ffffff' }
+    name: 'Terakota',
+    accent: '#E76F51',
+    light: { bg: '#FDF8F6', text: '#1B4332' },
+    dark: { bg: '#2D3B36', text: '#FAF9F6' }
   },
   {
-    name: 'Plava',
-    accent: '#468EE3',
-    light: { bg: '#ffffff', text: '#1a1a1a' },
-    dark: { bg: '#181920', text: '#ffffff' }
+    name: 'Lavanda',
+    accent: '#7C3AED',
+    light: { bg: '#F5F3FF', text: '#1F2937' },
+    dark: { bg: '#1E1B2E', text: '#F5F3FF' }
   },
   {
-    name: 'Tirkizna',
-    accent: '#18C6A0',
-    light: { bg: '#ffffff', text: '#1a1a1a' },
-    dark: { bg: '#181920', text: '#ffffff' }
+    name: 'Okean',
+    accent: '#0891B2',
+    light: { bg: '#ECFEFF', text: '#164E63' },
+    dark: { bg: '#164E63', text: '#ECFEFF' }
   },
   {
-    name: 'Roze',
-    accent: '#ec4899',
-    light: { bg: '#ffffff', text: '#1a1a1a' },
-    dark: { bg: '#181920', text: '#ffffff' }
+    name: 'Ruža',
+    accent: '#DB2777',
+    light: { bg: '#FDF2F8', text: '#831843' },
+    dark: { bg: '#2D1F2B', text: '#FDF2F8' }
   },
   {
-    name: 'Crvena',
-    accent: '#EF5050',
-    light: { bg: '#ffffff', text: '#1a1a1a' },
-    dark: { bg: '#181920', text: '#ffffff' }
+    name: 'Zlato',
+    accent: '#D97706',
+    light: { bg: '#FFFBEB', text: '#78350F' },
+    dark: { bg: '#292524', text: '#FEFCE8' }
   },
 ]
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-8 text-muted-foreground">Učitavanje...</div>}>
+      <SettingsPageContent />
+    </Suspense>
+  )
+}
+
+function SettingsPageContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [salon, setSalon] = useState<Salon | null>(null)
   const [services, setServices] = useState<Service[]>([])
   const [loading, setLoading] = useState(true)
@@ -110,7 +121,6 @@ export default function SettingsPage() {
   const [savingBranding, setSavingBranding] = useState(false)
   const [copied, setCopied] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
-  const [uploadingBanner, setUploadingBanner] = useState(false)
 
   // Working hours state
   const [workingHours, setWorkingHours] = useState<WorkingHours[]>([])
@@ -130,7 +140,6 @@ export default function SettingsPage() {
   })
 
   const logoInputRef = useRef<HTMLInputElement>(null)
-  const bannerInputRef = useRef<HTMLInputElement>(null)
 
   // General settings form
   const [formData, setFormData] = useState({
@@ -146,7 +155,6 @@ export default function SettingsPage() {
     name: '',
     description: '',
     logo_url: null as string | null,
-    banner_url: null as string | null,
     accent_color: '#CDA661',
     background_color: '#181920',
     text_color: '#ffffff',
@@ -155,6 +163,21 @@ export default function SettingsPage() {
     welcome_message: '',
   })
   const [selectedThemeMode, setSelectedThemeMode] = useState<'light' | 'dark'>('dark')
+
+  // Toast notification state
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message })
+  }
+
+  // Auto-dismiss toast after 3 seconds
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
 
   useEffect(() => {
     fetchSalon()
@@ -210,7 +233,6 @@ export default function SettingsPage() {
           name: data.salon.name,
           description: data.salon.description || '',
           logo_url: data.salon.logo_url,
-          banner_url: data.salon.banner_url,
           accent_color: data.salon.accent_color || '#CDA661',
           background_color: data.salon.background_color || '#181920',
           text_color: data.salon.text_color || '#ffffff',
@@ -218,6 +240,8 @@ export default function SettingsPage() {
           theme: data.salon.theme || 'dark',
           welcome_message: data.salon.welcome_message || '',
         })
+        // Sync selectedThemeMode with saved theme
+        setSelectedThemeMode((data.salon.theme as 'light' | 'dark') || 'dark')
       }
     } catch (error) {
       console.error('Error fetching salon:', error)
@@ -241,14 +265,14 @@ export default function SettingsPage() {
       if (response.ok) {
         const data = await response.json()
         setSalon(data.salon)
-        alert('Podešavanja su uspešno sačuvana')
+        showToast('success', 'Podešavanja su uspešno sačuvana')
       } else {
         const data = await response.json()
-        alert(data.error || 'Greška pri čuvanju podešavanja')
+        showToast('error', data.error || 'Greška pri čuvanju podešavanja')
       }
     } catch (error) {
       console.error('Error saving settings:', error)
-      alert('Greška pri čuvanju podešavanja')
+      showToast('error', 'Greška pri čuvanju podešavanja')
     } finally {
       setSaving(false)
     }
@@ -266,27 +290,25 @@ export default function SettingsPage() {
       })
 
       if (response.ok) {
-        alert('Podešavanja brendiranja su sačuvana!')
+        showToast('success', 'Podešavanja brendiranja su sačuvana')
       } else {
         const data = await response.json()
-        alert(data.error || 'Greška pri čuvanju')
+        showToast('error', data.error || 'Greška pri čuvanju')
       }
     } catch (error) {
-      alert('Greška pri čuvanju')
+      showToast('error', 'Greška pri čuvanju')
     } finally {
       setSavingBranding(false)
     }
   }
 
-  const handleFileUpload = async (file: File, type: 'logo' | 'banner') => {
-    const setUploading = type === 'logo' ? setUploadingLogo : setUploadingBanner
-
-    setUploading(true)
+  const handleLogoUpload = async (file: File) => {
+    setUploadingLogo(true)
 
     try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('type', type)
+      formData.append('type', 'logo')
 
       const response = await fetch('/api/dashboard/upload', {
         method: 'POST',
@@ -296,25 +318,20 @@ export default function SettingsPage() {
       const data = await response.json()
 
       if (response.ok) {
-        setBrandingData((prev) => ({
-          ...prev,
-          [type === 'logo' ? 'logo_url' : 'banner_url']: data.url,
-        }))
+        setBrandingData((prev) => ({ ...prev, logo_url: data.url }))
+        showToast('success', 'Logo je uspešno uploadovan')
       } else {
-        alert(data.error || 'Greška pri uploadu')
+        showToast('error', data.error || 'Greška pri uploadu')
       }
     } catch (error) {
-      alert('Greška pri uploadu')
+      showToast('error', 'Greška pri uploadu')
     } finally {
-      setUploading(false)
+      setUploadingLogo(false)
     }
   }
 
-  const handleRemoveImage = (type: 'logo' | 'banner') => {
-    setBrandingData((prev) => ({
-      ...prev,
-      [type === 'logo' ? 'logo_url' : 'banner_url']: null,
-    }))
+  const handleRemoveLogo = () => {
+    setBrandingData((prev) => ({ ...prev, logo_url: null }))
   }
 
   // Working hours handlers
@@ -353,12 +370,14 @@ export default function SettingsPage() {
         setHoursDialogOpen(false)
         setEditingHoursId(null)
         fetchWorkingHours()
+        showToast('success', 'Radno vreme je sačuvano')
       } else {
         const data = await response.json()
-        alert(data.error || 'Greška pri čuvanju')
+        showToast('error', data.error || 'Greška pri čuvanju')
       }
     } catch (error) {
       console.error('Error:', error)
+      showToast('error', 'Greška pri čuvanju')
     }
   }
 
@@ -414,12 +433,14 @@ export default function SettingsPage() {
         setEditingBlockedId(null)
         setBlockedForm({ start_date: '', start_time: '09:00', end_date: '', end_time: '17:00', reason: '' })
         fetchWorkingHours()
+        showToast('success', 'Blokiran termin je sačuvan')
       } else {
         const data = await response.json()
-        alert(data.error || 'Greška pri čuvanju')
+        showToast('error', data.error || 'Greška pri čuvanju')
       }
     } catch (error) {
       console.error('Error:', error)
+      showToast('error', 'Greška pri čuvanju')
     }
   }
 
@@ -445,8 +466,16 @@ export default function SettingsPage() {
     setSelectedThemeMode(mode)
   }
 
+  // Auto-detect domain (works on localhost and production)
+  const getBaseUrl = () => {
+    if (typeof window !== 'undefined') {
+      return window.location.origin
+    }
+    return process.env.NEXT_PUBLIC_APP_URL || 'https://dragica-web-app.vercel.app'
+  }
+
   const bookingUrl = salon
-    ? `${process.env.NEXT_PUBLIC_APP_URL || 'https://dragica-web-app.vercel.app'}/book/${salon.slug || salon.subdomain}`
+    ? `${getBaseUrl()}/book/${salon.slug || salon.subdomain}`
     : ''
 
   const handleCopyUrl = () => {
@@ -458,39 +487,80 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-3xl font-bold">Podešavanja</h1>
+        <h1 className="text-3xl font-bold font-serif">Podešavanja</h1>
         <p className="text-muted-foreground">Učitavanje...</p>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full min-w-0">
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-6 left-0 right-0 z-50 flex justify-center px-4 animate-in slide-in-from-top-4 fade-in duration-300">
+          <div
+            className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl bg-card border-l-4 ${
+              toast.type === 'success'
+                ? 'border-l-primary text-primary'
+                : 'border-l-destructive text-destructive'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <CheckCircle2 className="h-6 w-6 shrink-0" />
+            ) : (
+              <XCircle className="h-6 w-6 shrink-0" />
+            )}
+            <span className="text-base font-semibold text-foreground">{toast.message}</span>
+            <button
+              onClick={() => setToast(null)}
+              className="ml-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div>
-        <h1 className="text-3xl font-bold">Podešavanja</h1>
-        <p className="text-muted-foreground">Upravljajte podešavanjima vašeg salona</p>
+        <h1 className="text-3xl sm:text-4xl font-bold">Podešavanja</h1>
+        <p className="text-base sm:text-lg text-muted-foreground">Upravljajte podešavanjima vašeg salona</p>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="general" className="gap-2">
+      <Tabs
+        value={searchParams.get('tab') || 'general'}
+        onValueChange={(tab) => {
+          router.replace(`${pathname}?tab=${tab}`, { scroll: false })
+        }}
+        className="space-y-4"
+      >
+        <TabsList className="w-full bg-transparent gap-2 p-0">
+          <TabsTrigger
+            value="general"
+            className="flex-1 gap-2 h-11 px-4 font-bold uppercase tracking-wide border-2 border-transparent data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:border-foreground data-[state=active]:shadow-[3px_3px_0px_#1B4332] data-[state=inactive]:text-foreground/70 data-[state=inactive]:hover:bg-secondary/50"
+          >
             <Settings className="h-4 w-4" />
-            Opšte
+            <span className="hidden sm:inline">Opšte</span>
           </TabsTrigger>
-          <TabsTrigger value="hours" className="gap-2">
+          <TabsTrigger
+            value="hours"
+            className="flex-1 gap-2 h-11 px-4 font-bold uppercase tracking-wide border-2 border-transparent data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:border-foreground data-[state=active]:shadow-[3px_3px_0px_#1B4332] data-[state=inactive]:text-foreground/70 data-[state=inactive]:hover:bg-secondary/50"
+          >
             <Clock className="h-4 w-4" />
-            Radno vreme
+            <span className="hidden sm:inline">Radno vreme</span>
           </TabsTrigger>
-          <TabsTrigger value="branding" className="gap-2">
+          <TabsTrigger
+            value="branding"
+            className="flex-1 gap-2 h-11 px-4 font-bold uppercase tracking-wide border-2 border-transparent data-[state=active]:bg-white data-[state=active]:text-primary data-[state=active]:border-foreground data-[state=active]:shadow-[3px_3px_0px_#1B4332] data-[state=inactive]:text-foreground/70 data-[state=inactive]:hover:bg-secondary/50"
+          >
             <Paintbrush className="h-4 w-4" />
-            Brendiranje
+            <span className="hidden sm:inline">Brendiranje</span>
           </TabsTrigger>
         </TabsList>
 
         {/* General Settings Tab */}
-        <TabsContent value="general" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-6">
+        <TabsContent value="general" className="space-y-4">
+          <div className="grid gap-6 md:grid-cols-3">
+            <div className="md:col-span-2 space-y-6">
               {/* Basic Info */}
               <Card>
                 <CardHeader>
@@ -590,35 +660,6 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              {/* Account Info */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Informacije o nalogu</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Subdomen</p>
-                    <p className="font-mono">{salon?.subdomain}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Slug</p>
-                    <p className="font-mono">{salon?.slug}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Status</p>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        salon?.is_active
-                          ? 'bg-success/10 text-success'
-                          : 'bg-destructive/10 text-destructive'
-                      }`}
-                    >
-                      {salon?.is_active ? 'Aktivan' : 'Neaktivan'}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-
               {/* Help */}
               <Card>
                 <CardHeader>
@@ -638,8 +679,8 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Working Hours Tab */}
-        <TabsContent value="hours" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
+        <TabsContent value="hours" className="space-y-4">
+          <div className="grid gap-6 md:grid-cols-2">
             {/* Weekly Schedule */}
             <Card>
               <CardHeader>
@@ -650,22 +691,22 @@ export default function SettingsPage() {
                 {[1, 2, 3, 4, 5, 6, 0].map((dayIndex) => {
                   const hoursForDay = getHoursForDay(dayIndex)
                   return (
-                    <div key={dayIndex} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                      <div className="flex items-center gap-3">
-                        <span className="w-12 text-sm font-medium">{DAYS[dayIndex]}</span>
+                    <div key={dayIndex} className="flex flex-wrap items-center gap-2 py-2 border-b border-border last:border-0">
+                      <span className="w-10 text-sm font-medium flex-shrink-0">{DAYS[dayIndex]}</span>
+                      <div className="flex-1 min-w-0">
                         {hoursForDay.length === 0 ? (
                           <span className="text-sm text-muted-foreground">Neradni dan</span>
                         ) : (
-                          <div className="flex flex-wrap gap-2">
+                          <div className="flex flex-wrap gap-1">
                             {hoursForDay.map((hour) => (
-                              <div key={hour.id} className="flex items-center gap-1">
-                                <span className="text-sm font-mono text-primary">
+                              <div key={hour.id} className="flex items-center gap-0.5 bg-secondary/50 rounded px-1.5 py-0.5">
+                                <span className="text-xs font-mono text-primary">
                                   {hour.start_time}-{hour.end_time}
                                 </span>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditHours(hour)}>
+                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleEditHours(hour)}>
                                   <Pencil className="h-3 w-3" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleDeleteHours(hour.id)}>
+                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleDeleteHours(hour.id)}>
                                   <Trash2 className="h-3 w-3 text-destructive" />
                                 </Button>
                               </div>
@@ -673,7 +714,7 @@ export default function SettingsPage() {
                           </div>
                         )}
                       </div>
-                      <Button variant="ghost" size="sm" onClick={() => handleAddHours(dayIndex)}>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" onClick={() => handleAddHours(dayIndex)}>
                         <Plus className="h-4 w-4" />
                       </Button>
                     </div>
@@ -700,14 +741,17 @@ export default function SettingsPage() {
                 ) : (
                   <div className="space-y-2">
                     {blockedSlots.map((slot) => (
-                      <div key={slot.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                        <div>
-                          <p className="text-sm font-medium">
-                            {format(new Date(slot.start_datetime), 'd. MMM HH:mm', { locale: srLatn })} - {format(new Date(slot.end_datetime), 'd. MMM HH:mm', { locale: srLatn })}
+                      <div key={slot.id} className="flex items-start justify-between gap-2 p-3 rounded-lg bg-secondary/50">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium">
+                            {format(new Date(slot.start_datetime), 'd. MMM HH:mm', { locale: srLatn })}
                           </p>
-                          {slot.reason && <p className="text-xs text-muted-foreground">{slot.reason}</p>}
+                          <p className="text-xs text-muted-foreground">
+                            do {format(new Date(slot.end_datetime), 'd. MMM HH:mm', { locale: srLatn })}
+                          </p>
+                          {slot.reason && <p className="text-xs text-muted-foreground mt-1 truncate">{slot.reason}</p>}
                         </div>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-shrink-0">
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEditBlocked(slot)}>
                             <Pencil className="h-3 w-3" />
                           </Button>
@@ -725,158 +769,115 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* Branding Tab */}
-        <TabsContent value="branding" className="space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
+        <TabsContent value="branding" className="space-y-4">
+          <div className="grid gap-6 md:grid-cols-2">
             {/* Branding Settings Card */}
-            <Card>
-                <CardHeader>
-                  <CardTitle>Izgled stranice za zakazivanje</CardTitle>
+            <Card className="border-2 border-foreground shadow-[4px_4px_0px_#1B4332]">
+                <CardHeader className="border-b-2 border-foreground/20">
+                  <CardTitle className="flex items-center gap-2">
+                    <Paintbrush className="h-5 w-5 text-primary" />
+                    Izgled stranice za zakazivanje
+                  </CardTitle>
                   <CardDescription>Prilagodite izgled vaše javne stranice</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                  {/* Images Section */}
+                <CardContent className="space-y-6 pt-6">
+                  {/* Logo Section */}
                   <div className="space-y-4">
-                    <h3 className="text-sm font-medium flex items-center gap-2">
-                      <Image className="h-4 w-4" />
-                      Slike
+                    <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2">
+                      <Image className="h-4 w-4 text-primary" />
+                      Logo
                     </h3>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Logo Upload */}
-                      <div className="space-y-2">
-                        <Label>Logo</Label>
-                        <p className="text-xs text-muted-foreground">Preporučeno: 200x200px</p>
-                        <input
-                          ref={logoInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) handleFileUpload(file, 'logo')
-                          }}
-                        />
+                    <div className="space-y-3">
+                      <p className="text-xs text-muted-foreground">Preporučeno: 200x200px, PNG ili JPG</p>
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) handleLogoUpload(file)
+                        }}
+                      />
 
-                        {brandingData.logo_url ? (
-                          <div className="relative inline-block">
-                            <img
-                              src={brandingData.logo_url}
-                              alt="Logo"
-                              className="w-24 h-24 object-contain rounded-lg border border-border"
-                            />
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="absolute -top-2 -right-2 h-6 w-6"
-                              onClick={() => handleRemoveImage('logo')}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
+                      {brandingData.logo_url ? (
+                        <div className="relative inline-block">
+                          <img
+                            src={brandingData.logo_url}
+                            alt="Logo"
+                            className="w-24 h-24 object-contain rounded-lg border-2 border-foreground shadow-[3px_3px_0px_#1B4332]"
+                          />
                           <Button
-                            variant="outline"
-                            onClick={() => logoInputRef.current?.click()}
-                            disabled={uploadingLogo}
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-7 w-7 rounded-full border-2 border-foreground"
+                            onClick={() => handleRemoveLogo()}
                           >
-                            <Upload className="mr-2 h-4 w-4" />
-                            {uploadingLogo ? 'Uploadovanje...' : 'Dodaj logo'}
+                            <X className="h-4 w-4" />
                           </Button>
-                        )}
-                      </div>
-
-                      {/* Banner Upload */}
-                      <div className="space-y-2">
-                        <Label>Banner slika</Label>
-                        <p className="text-xs text-muted-foreground">Preporučeno: 1200x400px</p>
-                        <input
-                          ref={bannerInputRef}
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0]
-                            if (file) handleFileUpload(file, 'banner')
-                          }}
-                        />
-
-                        {brandingData.banner_url ? (
-                          <div className="relative">
-                            <img
-                              src={brandingData.banner_url}
-                              alt="Banner"
-                              className="w-full h-24 object-cover rounded-lg border border-border"
-                            />
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="absolute top-2 right-2 h-6 w-6"
-                              onClick={() => handleRemoveImage('banner')}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            onClick={() => bannerInputRef.current?.click()}
-                            disabled={uploadingBanner}
-                          >
-                            <Upload className="mr-2 h-4 w-4" />
-                            {uploadingBanner ? 'Uploadovanje...' : 'Dodaj banner'}
-                          </Button>
-                        )}
-                      </div>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          className="border-2 border-foreground shadow-[3px_3px_0px_#1B4332] hover:shadow-[4px_4px_0px_#1B4332] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all"
+                          onClick={() => logoInputRef.current?.click()}
+                          disabled={uploadingLogo}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          {uploadingLogo ? 'Uploadovanje...' : 'Dodaj logo'}
+                        </Button>
+                      )}
                     </div>
                   </div>
 
-                  <div className="border-t border-border" />
+                  <div className="border-t-2 border-foreground/20" />
 
                   {/* Colors Section */}
                   <div className="space-y-4">
-                    <h3 className="text-sm font-medium flex items-center gap-2">
-                      <Palette className="h-4 w-4" />
+                    <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2">
+                      <Palette className="h-4 w-4 text-primary" />
                       Tema boja
                     </h3>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {COLOR_THEMES.map((theme) => (
                         <div key={theme.name} className="space-y-2">
-                          <p className="text-sm font-medium">{theme.name}</p>
-                          <div className="flex gap-2">
+                          <p className="text-xs font-bold truncate">{theme.name}</p>
+                          <div className="flex gap-1.5">
                             {/* Light variant */}
                             <button
-                              className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
+                              className={`flex-1 p-2 rounded-lg border-2 transition-all ${
                                 brandingData.accent_color === theme.accent && selectedThemeMode === 'light'
-                                  ? 'border-primary'
-                                  : 'border-border hover:border-primary/50'
+                                  ? 'border-foreground shadow-[2px_2px_0px_#1B4332]'
+                                  : 'border-border hover:border-foreground/50'
                               }`}
                               style={{ backgroundColor: theme.light.bg }}
                               onClick={() => applyTheme(theme, 'light')}
                             >
                               <div
-                                className="w-6 h-6 rounded-full mx-auto mb-1"
+                                className="w-6 h-6 rounded-full mx-auto mb-1 border border-black/20"
                                 style={{ backgroundColor: theme.accent }}
                               />
-                              <span className="text-xs" style={{ color: theme.light.text }}>
+                              <span className="text-[10px] font-medium block" style={{ color: theme.light.text }}>
                                 Svetla
                               </span>
                             </button>
                             {/* Dark variant */}
                             <button
-                              className={`flex-1 p-3 rounded-lg border-2 transition-colors ${
+                              className={`flex-1 p-2 rounded-lg border-2 transition-all ${
                                 brandingData.accent_color === theme.accent && selectedThemeMode === 'dark'
-                                  ? 'border-primary'
-                                  : 'border-border hover:border-primary/50'
+                                  ? 'border-foreground shadow-[2px_2px_0px_#1B4332]'
+                                  : 'border-border hover:border-foreground/50'
                               }`}
                               style={{ backgroundColor: theme.dark.bg }}
                               onClick={() => applyTheme(theme, 'dark')}
                             >
                               <div
-                                className="w-6 h-6 rounded-full mx-auto mb-1"
+                                className="w-6 h-6 rounded-full mx-auto mb-1 border border-white/20"
                                 style={{ backgroundColor: theme.accent }}
                               />
-                              <span className="text-xs" style={{ color: theme.dark.text }}>
+                              <span className="text-[10px] font-medium block" style={{ color: theme.dark.text }}>
                                 Tamna
                               </span>
                             </button>
@@ -886,17 +887,17 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <div className="border-t border-border" />
+                  <div className="border-t-2 border-foreground/20" />
 
                   {/* Text Section */}
                   <div className="space-y-4">
-                    <h3 className="text-sm font-medium flex items-center gap-2">
-                      <Type className="h-4 w-4" />
+                    <h3 className="text-sm font-bold uppercase tracking-wide flex items-center gap-2">
+                      <Type className="h-4 w-4 text-primary" />
                       Tekst
                     </h3>
 
                     <div className="space-y-2">
-                      <Label>Poruka dobrodošlice</Label>
+                      <Label className="font-semibold">Poruka dobrodošlice</Label>
                       <Textarea
                         placeholder="Dobrodošli u naš salon! Zakažite svoj termin online."
                         value={brandingData.welcome_message}
@@ -904,6 +905,7 @@ export default function SettingsPage() {
                           setBrandingData({ ...brandingData, welcome_message: e.target.value })
                         }
                         rows={3}
+                        className="border-2 border-foreground/30 focus:border-foreground"
                       />
                       <p className="text-xs text-muted-foreground">
                         Prikazuje se na vrhu stranice za zakazivanje
@@ -911,66 +913,75 @@ export default function SettingsPage() {
                     </div>
                   </div>
 
-                  <Button onClick={handleSaveBranding} disabled={savingBranding}>
-                    <Save className="mr-2 h-4 w-4" />
+                  <Button
+                    onClick={handleSaveBranding}
+                    disabled={savingBranding}
+                    className="w-full h-12 text-base font-bold uppercase tracking-wide border-2 border-foreground shadow-[4px_4px_0px_#1B4332] hover:shadow-[5px_5px_0px_#1B4332] hover:translate-x-[-1px] hover:translate-y-[-1px] transition-all"
+                  >
+                    <Save className="mr-2 h-5 w-5" />
                     {savingBranding ? 'Čuvanje...' : 'Sačuvaj izmene'}
                   </Button>
                 </CardContent>
               </Card>
 
             {/* Preview */}
-            <Card>
-              <CardHeader>
+            <Card className="border-2 border-foreground shadow-[4px_4px_0px_#1B4332]">
+              <CardHeader className="border-b-2 border-foreground/20">
                 <CardTitle className="flex items-center gap-2">
-                  <Eye className="h-4 w-4" />
+                  <Eye className="h-5 w-5 text-primary" />
                   Pregled
                 </CardTitle>
                 <CardDescription>Kako će izgledati vaša stranica za zakazivanje</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-6">
                 <div
-                  className="rounded-lg overflow-hidden border border-border min-h-[400px]"
+                  className="rounded-xl overflow-hidden min-h-[400px]"
                   style={{
                     backgroundColor: brandingData.background_color,
                     color: brandingData.text_color,
+                    border: `3px solid ${brandingData.text_color}`,
+                    boxShadow: `6px 6px 0px ${brandingData.text_color}`,
                   }}
                 >
-                  {/* Banner */}
-                  {brandingData.banner_url ? (
-                    <img
-                      src={brandingData.banner_url}
-                      alt="Banner"
-                      className="w-full h-32 object-cover"
-                    />
-                  ) : (
-                    <div
-                      className="w-full h-32"
-                      style={{ backgroundColor: brandingData.accent_color }}
-                    />
-                  )}
-
                   {/* Content */}
                   <div className="p-6">
                     {/* Logo & Name */}
-                    <div className="flex items-center gap-4 mb-6">
+                    <div
+                      className="flex items-center gap-4 mb-6 p-4 rounded-lg"
+                      style={{
+                        backgroundColor: brandingData.theme === 'dark'
+                          ? `${brandingData.text_color}10`
+                          : `${brandingData.accent_color}15`,
+                        border: `2px solid ${brandingData.text_color}30`,
+                      }}
+                    >
                       {brandingData.logo_url ? (
                         <img
                           src={brandingData.logo_url}
                           alt="Logo"
-                          className="w-16 h-16 object-contain rounded"
+                          className="w-16 h-16 object-contain rounded-lg"
+                          style={{
+                            border: `2px solid ${brandingData.text_color}`,
+                            boxShadow: `3px 3px 0px ${brandingData.text_color}`,
+                          }}
                         />
                       ) : (
                         <div
-                          className="w-16 h-16 rounded flex items-center justify-center text-white text-xl font-bold"
-                          style={{ backgroundColor: brandingData.accent_color }}
+                          className="w-16 h-16 rounded-lg flex items-center justify-center text-xl font-extrabold"
+                          style={{
+                            backgroundColor: brandingData.accent_color,
+                            color: brandingData.background_color,
+                            border: `2px solid ${brandingData.text_color}`,
+                            boxShadow: `3px 3px 0px ${brandingData.text_color}`,
+                          }}
                         >
                           {brandingData.name?.charAt(0) || 'S'}
                         </div>
                       )}
                       <div>
-                        <h3 className="font-bold text-lg">{brandingData.name || salon?.name}</h3>
+                        <h3 className="font-extrabold text-xl">{brandingData.name || salon?.name}</h3>
                         {brandingData.welcome_message && (
-                          <p className="text-sm opacity-70">{brandingData.welcome_message}</p>
+                          <p className="text-sm opacity-70 font-medium">{brandingData.welcome_message}</p>
                         )}
                       </div>
                     </div>
@@ -980,15 +991,22 @@ export default function SettingsPage() {
                       {(services.length > 0 ? services : [{ id: '0', name: 'Primer usluge', duration_minutes: 60, price: 2000 }]).map((service) => (
                         <div
                           key={service.id}
-                          className="p-4 rounded-lg border"
-                          style={{ borderColor: brandingData.accent_color }}
+                          className="p-4 rounded-lg transition-all"
+                          style={{
+                            backgroundColor: brandingData.theme === 'dark'
+                              ? `${brandingData.text_color}08`
+                              : brandingData.background_color,
+                            border: `2px solid ${brandingData.text_color}40`,
+                          }}
                         >
                           <div className="flex justify-between items-start">
                             <div>
-                              <p className="font-medium">{service.name}</p>
+                              <p className="font-bold">{service.name}</p>
                               <p className="text-sm opacity-70">{service.duration_minutes} min</p>
                             </div>
-                            <p className="font-medium">{service.price.toLocaleString('sr-RS')} RSD</p>
+                            <p className="font-bold" style={{ color: brandingData.accent_color }}>
+                              {service.price.toLocaleString('sr-RS')} RSD
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -996,8 +1014,13 @@ export default function SettingsPage() {
 
                     {/* Button */}
                     <button
-                      className="w-full py-3 px-6 text-white font-medium rounded-lg"
-                      style={{ backgroundColor: brandingData.accent_color }}
+                      className="w-full py-3 px-6 font-bold uppercase tracking-wide rounded-lg transition-all"
+                      style={{
+                        backgroundColor: brandingData.accent_color,
+                        color: brandingData.theme === 'dark' ? brandingData.background_color : '#ffffff',
+                        border: `2px solid ${brandingData.text_color}`,
+                        boxShadow: `4px 4px 0px ${brandingData.text_color}`,
+                      }}
                     >
                       Zakaži termin
                     </button>
@@ -1042,7 +1065,7 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={() => setHoursDialogOpen(false)}>
                 Otkaži
               </Button>
@@ -1113,7 +1136,7 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={() => setBlockedDialogOpen(false)}>
                 Otkaži
               </Button>

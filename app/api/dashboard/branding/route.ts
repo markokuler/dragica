@@ -1,22 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getUserWithRole } from '@/lib/auth'
+import { getUserWithRole, getEffectiveTenantId } from '@/lib/auth'
 
 export async function PUT(request: NextRequest) {
   try {
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
     const supabase = createAdminClient()
 
     const body = await request.json()
     const {
       logo_url,
-      banner_url,
       accent_color,
       background_color,
       text_color,
@@ -29,7 +32,6 @@ export async function PUT(request: NextRequest) {
       .from('tenants')
       .update({
         logo_url: logo_url || null,
-        banner_url: banner_url || null,
         accent_color: accent_color || null,
         background_color: background_color || null,
         text_color: text_color || null,

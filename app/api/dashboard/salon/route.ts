@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getUserWithRole } from '@/lib/auth'
+import { getEffectiveTenantId, getUserWithRole } from '@/lib/auth'
 
 export async function GET() {
   try {
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    // Get effective tenant (supports impersonation)
+    const { tenantId, isImpersonating, impersonatedTenantName } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
+
     const supabase = createAdminClient()
 
     const { data: salon, error } = await supabase
@@ -23,7 +29,11 @@ export async function GET() {
       return NextResponse.json({ error: 'Salon nije pronađen' }, { status: 404 })
     }
 
-    return NextResponse.json({ salon })
+    return NextResponse.json({
+      salon,
+      isImpersonating,
+      impersonatedTenantName,
+    })
   } catch (error) {
     console.error('Error in GET /api/dashboard/salon:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -34,11 +44,17 @@ export async function PUT(request: NextRequest) {
   try {
     const userData = await getUserWithRole()
 
-    if (!userData || userData.role !== 'client') {
+    if (!userData) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const tenantId = userData.tenant_id
+    // Get effective tenant (supports impersonation)
+    const { tenantId } = await getEffectiveTenantId()
+
+    if (!tenantId) {
+      return NextResponse.json({ error: 'No tenant access' }, { status: 403 })
+    }
+
     const supabase = createAdminClient()
 
     const body = await request.json()

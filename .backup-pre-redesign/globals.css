@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* Font */
+  --font-sans: var(--font-poppins), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono);
+
+  /* Core Colors - Direct hex values */
+  --color-background: #13151A;
+  --color-foreground: #FFFFFF;
+
+  --color-card: #1E2330;
+  --color-card-foreground: #FFFFFF;
+
+  --color-popover: #242935;
+  --color-popover-foreground: #FFFFFF;
+
+  /* Primary - Gold */
+  --color-primary: #CDA661;
+  --color-primary-foreground: #FFFFFF;
+
+  /* Secondary - Dark Grey */
+  --color-secondary: #2C313F;
+  --color-secondary-foreground: #EBEBEB;
+
+  /* Muted */
+  --color-muted: #1F252E;
+  --color-muted-foreground: #B0B7C3;
+
+  /* Accent - Gold */
+  --color-accent: #CDA661;
+  --color-accent-foreground: #FFFFFF;
+
+  /* Destructive - Red */
+  --color-destructive: #EF5050;
+  --color-destructive-foreground: #FFFFFF;
+
+  /* Borders & Input */
+  --color-border: #3D4556;
+  --color-input: #262D3A;
+  --color-input-border: #4A5568;
+  --color-ring: #CDA661;
+
+  /* Status Colors */
+  --color-success: #18C6A0;
+  --color-warning: #F59E0B;
+  --color-info: #468EE3;
+  --color-error: #EF5050;
+
+  /* Booking Status Colors */
+  --color-status-pending: #F59E0B;
+  --color-status-confirmed: #468EE3;
+  --color-status-completed: #18C6A0;
+  --color-status-cancelled: #EF5050;
+  --color-status-noshow: #6054BA;
+
+  /* Legacy aliases */
+  --color-started: #6054BA;
+  --color-pending: #F59E0B;
+
+  /* Chart Colors */
+  --color-chart-1: #6054BA;
+  --color-chart-2: #CDA661;
+  --color-chart-3: #468EE3;
+  --color-chart-4: #18C6A0;
+  --color-chart-5: #EF5050;
+
+  /* Sidebar */
+  --color-sidebar: #12151A;
+  --color-sidebar-foreground: #FFFFFF;
+  --color-sidebar-primary: #CDA661;
+  --color-sidebar-primary-foreground: #FFFFFF;
+  --color-sidebar-accent: #242935;
+  --color-sidebar-accent-foreground: #FFFFFF;
+  --color-sidebar-border: #2C313F;
+  --color-sidebar-ring: #CDA661;
+
+  /* Radius */
+  --radius: 0.5rem;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.25rem;
+  --radius-4xl: 1.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+

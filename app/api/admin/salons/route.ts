@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getUserWithRole } from '@/lib/auth'
+import { getUserWithRole, requireAdmin } from '@/lib/auth'
+
+export async function GET() {
+  try {
+    const user = await requireAdmin()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = createAdminClient()
+
+    const { data: salons, error } = await supabase
+      .from('tenants')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching salons:', error)
+      return NextResponse.json({ error: 'Failed to fetch salons' }, { status: 500 })
+    }
+
+    return NextResponse.json({ salons })
+  } catch (error) {
+    console.error('Error in GET /api/admin/salons:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +37,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, slug, subdomain, email, phone, description, ownerEmail, ownerPassword } = body
+    const { name, slug, subdomain, email, phone, description, ownerEmail, ownerPassword, trialDays } = body
 
     // Validate required fields
     if (!name || !slug || !subdomain || !email || !phone || !ownerEmail || !ownerPassword) {
@@ -32,6 +58,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Subdomen već postoji' }, { status: 400 })
     }
 
+    // Calculate trial expiration
+    const trialDuration = trialDays || 30
+    const expiresAt = new Date()
+    expiresAt.setDate(expiresAt.getDate() + trialDuration)
+
     // Create tenant
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')
@@ -43,6 +74,8 @@ export async function POST(request: NextRequest) {
         phone,
         description: description || null,
         is_active: true,
+        subscription_status: 'trial',
+        subscription_expires_at: expiresAt.toISOString(),
       })
       .select()
       .single()
@@ -80,6 +113,29 @@ export async function POST(request: NextRequest) {
       await supabase.from('tenants').delete().eq('id', tenant.id)
       console.error('Error creating user record:', userError)
       return NextResponse.json({ error: 'Greška pri kreiranju korisničkog zapisa' }, { status: 500 })
+    }
+
+    // Create initial subscription record (if subscription_plans table exists)
+    try {
+      const { data: trialPlan } = await supabase
+        .from('subscription_plans')
+        .select('id')
+        .eq('is_trial', true)
+        .single()
+
+      if (trialPlan) {
+        await supabase.from('tenant_subscriptions').insert({
+          tenant_id: tenant.id,
+          plan_id: trialPlan.id,
+          started_at: new Date().toISOString(),
+          expires_at: expiresAt.toISOString(),
+          status: 'active',
+          trial_days: trialDuration,
+        })
+      }
+    } catch (subError) {
+      // Subscription tables may not exist yet, skip
+      console.log('Subscription tables not ready:', subError)
     }
 
     return NextResponse.json({ tenant, userId: authData.user.id }, { status: 201 })
