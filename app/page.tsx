@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import DragicaLogo from '@/components/DragicaLogo'
 import { LogIn, Phone } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 // Contact info - replace with actual values
 const CONTACT = {
@@ -14,6 +17,32 @@ const CONTACT = {
 }
 
 export default function LandingPage() {
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    // Check for auth hash in URL (from Supabase invite/magic link)
+    const hash = window.location.hash
+    if (hash && hash.includes('access_token')) {
+      // Parse the hash to check if it's an invite
+      const params = new URLSearchParams(hash.substring(1))
+      const type = params.get('type')
+
+      // Handle the auth session
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          // If it's an invite, go to setup page
+          if (type === 'invite' || type === 'recovery' || type === 'signup') {
+            router.push('/setup')
+          } else {
+            // Otherwise go to dashboard
+            router.push('/dashboard')
+          }
+        }
+      })
+    }
+  }, [router, supabase.auth])
+
   return (
     <div className="min-h-screen bg-[#E4EDE6] flex flex-col">
       {/* Decorative shapes */}
