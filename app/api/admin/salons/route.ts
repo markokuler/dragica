@@ -85,6 +85,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Greška pri kreiranju salona' }, { status: 500 })
     }
 
+    // Check if user already exists in Supabase Auth
+    const { data: existingUsers } = await supabase.auth.admin.listUsers()
+    const existingAuthUser = existingUsers?.users?.find(u => u.email === ownerEmail)
+
+    let authUserId: string
+
+    if (existingAuthUser) {
+      // User exists - delete old records and recreate
+      // Delete from users table first (if exists)
+      await supabase.from('users').delete().eq('id', existingAuthUser.id)
+      // Delete from auth
+      await supabase.auth.admin.deleteUser(existingAuthUser.id)
+    }
+
     // Invite owner using Supabase admin API
     // This sends an email with a link to set their password
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dragica.app'
@@ -103,9 +117,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Greška pri kreiranju korisničkog naloga' }, { status: 500 })
     }
 
-    // Create user record in users table
-    const { error: userError } = await supabase.from('users').insert({
-      id: authData.user.id,
+    authUserId = authData.user.id
+
+    // Create or update user record in users table
+    const { error: userError } = await supabase.from('users').upsert({
+      id: authUserId,
       email: ownerEmail,
       role: 'client',
       tenant_id: tenant.id,
@@ -113,7 +129,7 @@ export async function POST(request: NextRequest) {
 
     if (userError) {
       // Rollback: delete auth user and tenant
-      await supabase.auth.admin.deleteUser(authData.user.id)
+      await supabase.auth.admin.deleteUser(authUserId)
       await supabase.from('tenants').delete().eq('id', tenant.id)
       console.error('Error creating user record:', userError)
       return NextResponse.json({ error: 'Greška pri kreiranju korisničkog zapisa' }, { status: 500 })
@@ -142,7 +158,7 @@ export async function POST(request: NextRequest) {
       console.log('Subscription tables not ready:', subError)
     }
 
-    return NextResponse.json({ tenant, userId: authData.user.id }, { status: 201 })
+    return NextResponse.json({ tenant, userId: authUserId }, { status: 201 })
   } catch (error) {
     console.error('Error in POST /api/admin/salons:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
