@@ -3,22 +3,29 @@ import type { NextRequest } from 'next/server'
 
 export function middleware(request: NextRequest) {
   const hostname = request.headers.get('host') || ''
-  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'localhost:3000'
+  const baseDomain = process.env.NEXT_PUBLIC_BASE_DOMAIN || 'dragica.app'
 
   // Remove port if present for comparison
   const cleanHostname = hostname.split(':')[0]
   const cleanBaseDomain = baseDomain.split(':')[0]
 
-  // Skip subdomain logic for Vercel preview/production URLs
-  if (cleanHostname.includes('vercel.app') || cleanHostname === 'localhost') {
+  // Skip subdomain logic for:
+  // - Main domain (dragica.app)
+  // - www subdomain
+  // - Vercel preview URLs
+  // - Localhost
+  if (
+    cleanHostname === cleanBaseDomain ||
+    cleanHostname === `www.${cleanBaseDomain}` ||
+    cleanHostname.includes('vercel.app') ||
+    cleanHostname === 'localhost'
+  ) {
     return NextResponse.next()
   }
 
-  // Check if this is a subdomain request (for custom domains)
-  const isSubdomain = cleanHostname.includes('.') && cleanHostname !== cleanBaseDomain && !cleanHostname.startsWith('www.')
-
-  if (isSubdomain) {
-    const subdomain = cleanHostname.split('.')[0]
+  // Check if this is a subdomain request (e.g., milana.dragica.app)
+  if (cleanHostname.endsWith(`.${cleanBaseDomain}`)) {
+    const subdomain = cleanHostname.replace(`.${cleanBaseDomain}`, '')
 
     // Rewrite to the tenant booking page
     const url = request.nextUrl.clone()
