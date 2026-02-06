@@ -15,12 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ArrowLeft, Info } from 'lucide-react'
+import { ArrowLeft, Info, Mail } from 'lucide-react'
 
 export default function NoviSalonPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -30,7 +31,6 @@ export default function NoviSalonPage() {
     phone: '',
     description: '',
     ownerEmail: '',
-    ownerPassword: '',
     trialDays: '30',
   })
 
@@ -71,7 +71,13 @@ export default function NoviSalonPage() {
         return
       }
 
-      router.push('/admin/saloni')
+      setSuccess(true)
+      setLoading(false)
+
+      // Redirect after 3 seconds
+      setTimeout(() => {
+        router.push('/admin/saloni')
+      }, 3000)
     } catch (err) {
       setError('Došlo je do greške. Molimo pokušajte ponovo.')
       setLoading(false)
@@ -92,6 +98,27 @@ export default function NoviSalonPage() {
         </div>
       </div>
 
+      {success ? (
+        <Card className="max-w-md mx-auto">
+          <CardContent className="pt-6 text-center space-y-4">
+            <div className="w-16 h-16 bg-success/20 rounded-full flex items-center justify-center mx-auto">
+              <Mail className="h-8 w-8 text-success" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Salon kreiran!</h2>
+              <p className="text-muted-foreground mt-2">
+                Pozivnica je poslata na <strong>{formData.ownerEmail}</strong>
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Vlasnik će dobiti email sa linkom za postavljanje lozinke.
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Preusmeravanje za 3 sekunde...
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
       <form onSubmit={handleSubmit}>
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Salon Info */}
@@ -172,11 +199,11 @@ export default function NoviSalonPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Nalog vlasnika</CardTitle>
-                <CardDescription>Kredencijali za pristup sistemu</CardDescription>
+                <CardDescription>Vlasnik će dobiti email sa linkom za aktivaciju</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="ownerEmail">Email za prijavu *</Label>
+                  <Label htmlFor="ownerEmail">Email vlasnika *</Label>
                   <Input
                     id="ownerEmail"
                     type="email"
@@ -188,19 +215,12 @@ export default function NoviSalonPage() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="ownerPassword">Lozinka *</Label>
-                  <Input
-                    id="ownerPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    value={formData.ownerPassword}
-                    onChange={(e) => setFormData({ ...formData, ownerPassword: e.target.value })}
-                    required
-                    minLength={8}
-                    disabled={loading}
-                  />
-                  <p className="text-sm text-muted-foreground">Minimum 8 karaktera</p>
+                <div className="flex items-start gap-2 p-3 bg-primary/10 rounded-lg">
+                  <Mail className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-muted-foreground">
+                    <p className="font-medium text-foreground">Automatski invite</p>
+                    <p>Vlasnik će dobiti email sa linkom za postavljanje lozinke i verifikaciju naloga.</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -263,6 +283,7 @@ export default function NoviSalonPage() {
           </div>
         </div>
       </form>
+      )}
     </div>
   )
 }

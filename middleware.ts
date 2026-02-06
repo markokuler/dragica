@@ -48,8 +48,9 @@ export const config = {
      * - admin (admin routes)
      * - dashboard (dashboard routes)
      * - login (login page)
+     * - setup (account setup page)
      * - book (booking pages)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|admin|dashboard|login|book).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|admin|dashboard|login|setup|auth|book).*)',
   ],
 }

@@ -37,10 +37,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, slug, subdomain, email, phone, description, ownerEmail, ownerPassword, trialDays } = body
+    const { name, slug, subdomain, email, phone, description, ownerEmail, trialDays } = body
 
     // Validate required fields
-    if (!name || !slug || !subdomain || !email || !phone || !ownerEmail || !ownerPassword) {
+    if (!name || !slug || !subdomain || !email || !phone || !ownerEmail) {
       return NextResponse.json({ error: 'Sva obavezna polja moraju biti popunjena' }, { status: 400 })
     }
 
@@ -85,11 +85,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Greška pri kreiranju salona' }, { status: 500 })
     }
 
-    // Create owner account using Supabase admin API
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email: ownerEmail,
-      password: ownerPassword,
-      email_confirm: true,
+    // Invite owner using Supabase admin API
+    // This sends an email with a link to set their password
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://dragica.app'
+    const { data: authData, error: authError } = await supabase.auth.admin.inviteUserByEmail(ownerEmail, {
+      redirectTo: `${baseUrl}/setup`,
+      data: {
+        tenant_id: tenant.id,
+        role: 'client',
+      },
     })
 
     if (authError || !authData.user) {
