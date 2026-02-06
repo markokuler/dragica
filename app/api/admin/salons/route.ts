@@ -85,18 +85,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Greška pri kreiranju salona' }, { status: 500 })
     }
 
-    // Check if user already exists in Supabase Auth
-    const { data: existingUsers } = await supabase.auth.admin.listUsers()
-    const existingAuthUser = existingUsers?.users?.find(u => u.email === ownerEmail)
+    // Check if user already exists in users table by email
+    const { data: existingUserRecord } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', ownerEmail)
+      .single()
 
     let authUserId: string
 
-    if (existingAuthUser) {
-      // User exists - delete old records and recreate
-      // Delete from users table first (if exists)
-      await supabase.from('users').delete().eq('id', existingAuthUser.id)
-      // Delete from auth
-      await supabase.auth.admin.deleteUser(existingAuthUser.id)
+    if (existingUserRecord) {
+      // User exists in our database - delete from auth and users table
+      try {
+        await supabase.auth.admin.deleteUser(existingUserRecord.id)
+        console.log(`Deleted existing auth user: ${ownerEmail}`)
+      } catch (e) {
+        console.log(`Auth user may not exist: ${ownerEmail}`)
+      }
+      await supabase.from('users').delete().eq('id', existingUserRecord.id)
+    }
+
+    // Also check Supabase Auth directly (in case user exists there but not in our table)
+    try {
+      const { data: authUsers } = await supabase.auth.admin.listUsers()
+      const existingAuthUser = authUsers?.users?.find(u => u.email === ownerEmail)
+      if (existingAuthUser) {
+        await supabase.auth.admin.deleteUser(existingAuthUser.id)
+        console.log(`Deleted orphan auth user: ${ownerEmail}`)
+      }
+    } catch (e) {
+      console.log('Could not check for orphan auth users')
     }
 
     // Invite owner using Supabase admin API

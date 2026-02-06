@@ -145,19 +145,32 @@ export async function DELETE(
     // Note: Due to CASCADE DELETE in database schema, deleting the tenant will
     // automatically delete all related records (services, working_hours, bookings, etc.)
 
-    // Delete the salon owner user
+    // Get all users associated with this tenant
     const { data: users } = await supabase
       .from('users')
-      .select('id')
+      .select('id, email')
       .eq('tenant_id', id)
 
+    // Delete auth users first (before deleting from users table due to FK constraints)
     if (users && users.length > 0) {
       for (const user of users) {
-        await supabase.auth.admin.deleteUser(user.id)
+        try {
+          // Delete from Supabase Auth
+          await supabase.auth.admin.deleteUser(user.id)
+          console.log(`Deleted auth user: ${user.email}`)
+        } catch (authDeleteError) {
+          console.error(`Failed to delete auth user ${user.email}:`, authDeleteError)
+        }
       }
     }
 
-    // Delete salon
+    // Delete users from users table
+    await supabase
+      .from('users')
+      .delete()
+      .eq('tenant_id', id)
+
+    // Delete salon (CASCADE will handle other related records)
     const { error: deleteError } = await supabase
       .from('tenants')
       .delete()
