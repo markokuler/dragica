@@ -131,8 +131,12 @@ export async function POST(request: NextRequest) {
     if (authError || !authData.user) {
       // Rollback: delete tenant if user creation fails
       await supabase.from('tenants').delete().eq('id', tenant.id)
-      console.error('Error creating user:', authError)
-      return NextResponse.json({ error: 'Greška pri kreiranju korisničkog naloga' }, { status: 500 })
+      console.error('Error inviting user:', authError)
+      // Return detailed error for debugging
+      return NextResponse.json({
+        error: `Greška pri kreiranju korisničkog naloga: ${authError?.message || 'Unknown error'}`,
+        details: authError
+      }, { status: 500 })
     }
 
     authUserId = authData.user.id
