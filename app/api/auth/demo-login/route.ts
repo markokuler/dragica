@@ -18,7 +18,15 @@ export async function POST(request: NextRequest) {
       : process.env.DEMO_OWNER_PASSWORD
 
     if (!email || !password) {
-      return NextResponse.json({ error: 'Demo nalog nije konfigurisan' }, { status: 500 })
+      return NextResponse.json({
+        error: 'Demo nalog nije konfigurisan',
+        debug: {
+          hasEmail: !!email,
+          hasPassword: !!password,
+          type,
+          envKeys: Object.keys(process.env).filter(k => k.includes('DEMO')),
+        }
+      }, { status: 500 })
     }
 
     // Verify user is actually a demo user before signing in
