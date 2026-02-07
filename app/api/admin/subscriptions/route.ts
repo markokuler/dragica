@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
 
 export async function GET() {
   try {
@@ -12,8 +12,10 @@ export async function GET() {
     const supabase = createAdminClient()
     const now = new Date()
 
+    const demoTenantIds = await getDemoTenantIds(user)
+
     // Get all tenants with their subscription info
-    const { data: tenants, error: tenantsError } = await supabase
+    let tenantsQuery = supabase
       .from('tenants')
       .select(`
         id,
@@ -24,13 +26,19 @@ export async function GET() {
       `)
       .order('subscription_expires_at', { ascending: true, nullsFirst: false })
 
+    if (demoTenantIds) {
+      tenantsQuery = tenantsQuery.in('id', demoTenantIds)
+    }
+
+    const { data: tenants, error: tenantsError } = await tenantsQuery
+
     if (tenantsError) {
       console.error('Error fetching tenants:', tenantsError)
       return NextResponse.json({ error: 'Failed to fetch subscriptions' }, { status: 500 })
     }
 
     // Get active subscriptions from tenant_subscriptions table
-    const { data: subscriptions, error: subsError } = await supabase
+    let subsQuery = supabase
       .from('tenant_subscriptions')
       .select(`
         id,
@@ -44,6 +52,12 @@ export async function GET() {
         )
       `)
       .order('expires_at', { ascending: true })
+
+    if (demoTenantIds) {
+      subsQuery = subsQuery.in('tenant_id', demoTenantIds)
+    }
+
+    const { data: subscriptions, error: subsError } = await subsQuery
 
     // Create a map of tenant_id to subscription
     const subscriptionMap = new Map()

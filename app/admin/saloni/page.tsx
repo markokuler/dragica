@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -56,6 +55,7 @@ import {
   Copy,
   ExternalLink,
   MessageCircle,
+  MessageSquare,
   Check,
 } from 'lucide-react'
 import { format } from 'date-fns'
@@ -107,6 +107,20 @@ export default function SaloniPage() {
   })
   const [submitting, setSubmitting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+
+  // New salon dialog
+  const [newSalonDialogOpen, setNewSalonDialogOpen] = useState(false)
+  const [newSalonForm, setNewSalonForm] = useState({
+    name: '',
+    subdomain: '',
+    email: '',
+    phone: '',
+    ownerEmail: '',
+    trialDays: '30',
+    description: '',
+  })
+  const [creatingSalon, setCreatingSalon] = useState(false)
+  const [createError, setCreateError] = useState('')
 
   useEffect(() => {
     fetchData()
@@ -248,6 +262,55 @@ export default function SaloniPage() {
     navigator.clipboard.writeText(url)
     setCopiedId(salon.id)
     setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  const handleNameChange = (name: string) => {
+    const slug = name
+      .toLowerCase()
+      .replace(/[čć]/g, 'c')
+      .replace(/[š]/g, 's')
+      .replace(/[ž]/g, 'z')
+      .replace(/[đ]/g, 'dj')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+    setNewSalonForm({ ...newSalonForm, name, subdomain: slug })
+  }
+
+  const handleCreateSalon = async () => {
+    setCreatingSalon(true)
+    setCreateError('')
+
+    try {
+      const response = await fetch('/api/admin/salons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newSalonForm,
+          trialDays: parseInt(newSalonForm.trialDays),
+        }),
+      })
+
+      if (response.ok) {
+        setNewSalonDialogOpen(false)
+        setNewSalonForm({
+          name: '',
+          subdomain: '',
+          email: '',
+          phone: '',
+          ownerEmail: '',
+          trialDays: '30',
+          description: '',
+        })
+        fetchData()
+      } else {
+        const data = await response.json()
+        setCreateError(data.error || 'Greška pri kreiranju salona')
+      }
+    } catch (error) {
+      setCreateError('Greška pri kreiranju salona')
+    } finally {
+      setCreatingSalon(false)
+    }
   }
 
   const openWhatsApp = (salon: Salon) => {
@@ -424,12 +487,10 @@ export default function SaloniPage() {
             <Upload className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Import CSV</span>
           </Button>
-          <Link href="/admin/saloni/novi">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Novi salon
-            </Button>
-          </Link>
+          <Button onClick={() => setNewSalonDialogOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novi salon
+          </Button>
         </div>
       </div>
 
@@ -557,12 +618,10 @@ export default function SaloniPage() {
                   : 'Nema salona'}
               </p>
               {!search && statusFilter === 'all' && subscriptionFilter === 'all' && (
-                <Link href="/admin/saloni/novi">
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Dodaj prvi salon
-                  </Button>
-                </Link>
+                <Button onClick={() => setNewSalonDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Dodaj prvi salon
+                </Button>
               )}
             </div>
           ) : (
@@ -640,6 +699,13 @@ export default function SaloniPage() {
                                 }}>
                                   <Eye className="mr-2 h-4 w-4" />
                                   Pregled
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation()
+                                  router.push(`/admin/saloni/${salon.id}?tab=crm`)
+                                }}>
+                                  <MessageSquare className="mr-2 h-4 w-4" />
+                                  CRM
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={(e) => {
                                   e.stopPropagation()
@@ -737,6 +803,13 @@ export default function SaloniPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={(e) => {
+                              e.stopPropagation()
+                              router.push(`/admin/saloni/${salon.id}?tab=crm`)
+                            }}>
+                              <MessageSquare className="mr-2 h-4 w-4" />
+                              CRM
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation()
                               openPaymentDialog(salon)
@@ -864,6 +937,120 @@ export default function SaloniPage() {
             </Button>
             <Button onClick={handleImportCSV} disabled={!importFile || importing}>
               {importing ? 'Importovanje...' : 'Importuj'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Salon Dialog */}
+      <Dialog open={newSalonDialogOpen} onOpenChange={(open) => {
+        setNewSalonDialogOpen(open)
+        if (!open) setCreateError('')
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Novi salon</DialogTitle>
+            <DialogDescription>Kreirajte novi salon i vlasnikov nalog</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="salon_name">Naziv salona *</Label>
+              <Input
+                id="salon_name"
+                value={newSalonForm.name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="npr. Beauty Studio Milana"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="salon_subdomain">Subdomen *</Label>
+              <Input
+                id="salon_subdomain"
+                value={newSalonForm.subdomain}
+                onChange={(e) => setNewSalonForm({ ...newSalonForm, subdomain: e.target.value })}
+                placeholder="beauty-studio-milana"
+              />
+              <p className="text-xs text-muted-foreground">/book/{newSalonForm.subdomain || 'subdomen'}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="salon_email">Email salona</Label>
+                <Input
+                  id="salon_email"
+                  type="email"
+                  value={newSalonForm.email}
+                  onChange={(e) => setNewSalonForm({ ...newSalonForm, email: e.target.value })}
+                  placeholder="salon@email.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="salon_phone">Telefon</Label>
+                <Input
+                  id="salon_phone"
+                  value={newSalonForm.phone}
+                  onChange={(e) => setNewSalonForm({ ...newSalonForm, phone: e.target.value })}
+                  placeholder="+381..."
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="owner_email">Email vlasnika *</Label>
+                <Input
+                  id="owner_email"
+                  type="email"
+                  value={newSalonForm.ownerEmail}
+                  onChange={(e) => setNewSalonForm({ ...newSalonForm, ownerEmail: e.target.value })}
+                  placeholder="vlasnik@email.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Trial period</Label>
+                <Select value={newSalonForm.trialDays} onValueChange={(v) => setNewSalonForm({ ...newSalonForm, trialDays: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7">7 dana</SelectItem>
+                    <SelectItem value="14">14 dana</SelectItem>
+                    <SelectItem value="30">30 dana</SelectItem>
+                    <SelectItem value="45">45 dana</SelectItem>
+                    <SelectItem value="60">60 dana</SelectItem>
+                    <SelectItem value="90">90 dana</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="salon_desc">Opis</Label>
+              <Textarea
+                id="salon_desc"
+                value={newSalonForm.description}
+                onChange={(e) => setNewSalonForm({ ...newSalonForm, description: e.target.value })}
+                placeholder="Kratki opis salona (opciono)"
+                rows={2}
+              />
+            </div>
+
+            {createError && (
+              <p className="text-sm text-destructive">{createError}</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setNewSalonDialogOpen(false)}>
+              Otkaži
+            </Button>
+            <Button
+              onClick={handleCreateSalon}
+              disabled={creatingSalon || !newSalonForm.name || !newSalonForm.subdomain || !newSalonForm.ownerEmail}
+            >
+              {creatingSalon ? 'Kreiranje...' : 'Kreiraj salon'}
             </Button>
           </DialogFooter>
         </DialogContent>

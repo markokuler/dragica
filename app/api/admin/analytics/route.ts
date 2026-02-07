@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,10 +19,14 @@ export async function GET(request: NextRequest) {
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1)
     const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0)
 
+    const demoTenantIds = await getDemoTenantIds(user)
+
     // Get total revenue from payments
-    const { data: allPayments } = await supabase
-      .from('payments')
-      .select('amount, payment_date')
+    let paymentsQuery = supabase.from('payments').select('amount, payment_date')
+    if (demoTenantIds) {
+      paymentsQuery = paymentsQuery.in('tenant_id', demoTenantIds)
+    }
+    const { data: allPayments } = await paymentsQuery
 
     const totalRevenue = allPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
 
@@ -32,9 +36,11 @@ export async function GET(request: NextRequest) {
     ).reduce((sum, p) => sum + (p.amount || 0), 0) || 0
 
     // Get all tenants
-    const { data: tenants } = await supabase
-      .from('tenants')
-      .select('id, name, created_at, is_active')
+    let tenantsQuery = supabase.from('tenants').select('id, name, created_at, is_active')
+    if (demoTenantIds) {
+      tenantsQuery = tenantsQuery.in('id', demoTenantIds)
+    }
+    const { data: tenants } = await tenantsQuery
 
     const totalSalons = tenants?.length || 0
     const activeSalons = tenants?.filter(t => t.is_active).length || 0
@@ -46,17 +52,16 @@ export async function GET(request: NextRequest) {
     ).length || 0
 
     // Bookings this month
-    const { count: bookingsThisMonth } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', thisMonthStart.toISOString())
+    let bookingsThisMonthQuery = supabase.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', thisMonthStart.toISOString())
+    let bookingsLastMonthQuery = supabase.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', lastMonthStart.toISOString()).lt('created_at', thisMonthStart.toISOString())
 
-    // Bookings last month
-    const { count: bookingsLastMonth } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', lastMonthStart.toISOString())
-      .lt('created_at', thisMonthStart.toISOString())
+    if (demoTenantIds) {
+      bookingsThisMonthQuery = bookingsThisMonthQuery.in('tenant_id', demoTenantIds)
+      bookingsLastMonthQuery = bookingsLastMonthQuery.in('tenant_id', demoTenantIds)
+    }
+
+    const { count: bookingsThisMonth } = await bookingsThisMonthQuery
+    const { count: bookingsLastMonth } = await bookingsLastMonthQuery
 
     // Calculate growth
     const bookingsGrowth = bookingsLastMonth && bookingsLastMonth > 0
@@ -69,10 +74,11 @@ export async function GET(request: NextRequest) {
       : 0
 
     // Top salons by bookings
-    const { data: bookingsByTenant } = await supabase
-      .from('bookings')
-      .select('tenant_id')
-      .gte('created_at', periodStart.toISOString())
+    let bookingsByTenantQuery = supabase.from('bookings').select('tenant_id').gte('created_at', periodStart.toISOString())
+    if (demoTenantIds) {
+      bookingsByTenantQuery = bookingsByTenantQuery.in('tenant_id', demoTenantIds)
+    }
+    const { data: bookingsByTenant } = await bookingsByTenantQuery
 
     // Count bookings per tenant
     const tenantBookings: Record<string, number> = {}

@@ -11,10 +11,17 @@ export async function GET() {
 
     const supabase = createAdminClient()
 
-    const { data: salons, error } = await supabase
+    let query = supabase
       .from('tenants')
       .select('*')
       .order('created_at', { ascending: false })
+
+    // Demo admin only sees demo tenants
+    if (user.is_demo) {
+      query = query.eq('is_demo', true)
+    }
+
+    const { data: salons, error } = await query
 
     if (error) {
       console.error('Error fetching salons:', error)

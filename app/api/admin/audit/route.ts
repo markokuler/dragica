@@ -24,6 +24,13 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
+    // Demo admin sees demo entries only
+    if (user.is_demo) {
+      query = query.eq('is_demo', true)
+    } else {
+      query = query.eq('is_demo', false)
+    }
+
     if (action) {
       query = query.eq('action', action)
     }

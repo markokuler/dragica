@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -62,8 +62,6 @@ import {
   Globe,
   CalendarDays,
   CheckCircle2,
-  XCircle,
-  AlertCircle,
   Activity,
   Trash2,
   FileText,
@@ -118,20 +116,12 @@ interface Stats {
     total: number
     thisMonth: number
     lastMonth: number
-    completed: number
-    byStatus: {
-      pending: number
-      confirmed: number
-      completed: number
-      cancelled: number
-      noshow: number
-    }
-    lastBooking: { date: string; time: string } | null
+    lastActivityDate: string | null
   }
   clients: { total: number }
   services: { total: number; active: number }
-  revenue: { total: number; thisMonth: number }
-  activity: { ownerLastLogin: string | null; ownerCreatedAt: string | null; workingDays: number }
+  engagement: { onlineBookingRate: number; completionRate: number }
+  activity: { ownerCreatedAt: string | null; workingDays: number }
 }
 
 interface SalonTag {
@@ -175,7 +165,12 @@ const CONTACT_TYPES = [
 export default function SalonBusinessPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const salonId = params.id as string
+
+  const validTabs = ['pregled', 'crm', 'uplate', 'statistika', 'podesavanja']
+  const tabParam = searchParams.get('tab')
+  const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : 'pregled'
 
   const [salon, setSalon] = useState<Salon | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
@@ -183,7 +178,7 @@ export default function SalonBusinessPage() {
   const [totalPaid, setTotalPaid] = useState(0)
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('pregled')
+  const [activeTab, setActiveTab] = useState(initialTab)
 
   // CRM state
   const [tags, setTags] = useState<SalonTag[]>([])
@@ -805,12 +800,8 @@ export default function SalonBusinessPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Poslednja prijava vlasnika:</span>
-                  <span className="text-sm">{stats?.activity.ownerLastLogin ? new Date(stats.activity.ownerLastLogin).toLocaleDateString('sr-RS') : 'Nikada'}</span>
-                </div>
-                <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Poslednje zakazivanje:</span>
-                  <span className="text-sm">{stats?.bookings.lastBooking ? new Date(stats.bookings.lastBooking.date).toLocaleDateString('sr-RS') : 'Nema'}</span>
+                  <span className="text-sm">{stats?.bookings.lastActivityDate ? new Date(stats.bookings.lastActivityDate).toLocaleDateString('sr-RS') : 'Nema'}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Aktivnih usluga:</span>
@@ -1046,29 +1037,51 @@ export default function SalonBusinessPage() {
                 <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Ukupno:</span><span className="font-bold">{stats?.bookings.total || 0}</span></div>
                 <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Ovaj mesec:</span><span className="font-medium">{stats?.bookings.thisMonth || 0}</span></div>
                 <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Prošli mesec:</span><span className="text-muted-foreground">{stats?.bookings.lastMonth || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Završenih:</span><span className="text-success">{stats?.bookings.completed || 0}</span></div>
+                <div className="flex items-center gap-1 pt-2 border-t">
+                  {bookingTrend.isUp ? <TrendingUp className="h-4 w-4 text-success" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
+                  <span className={`text-sm font-medium ${bookingTrend.isUp ? 'text-success' : 'text-destructive'}`}>
+                    {bookingTrend.trend}% vs prošli mesec
+                  </span>
+                </div>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-sm">Po statusu</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Korišćenje platforme</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between"><span className="text-sm flex items-center gap-2"><AlertCircle className="h-3 w-3 text-primary" />Na čekanju</span><span>{stats?.bookings.byStatus.pending || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm flex items-center gap-2"><CheckCircle2 className="h-3 w-3 text-blue-500" />Potvrđeno</span><span>{stats?.bookings.byStatus.confirmed || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm flex items-center gap-2"><CheckCircle2 className="h-3 w-3 text-success" />Završeno</span><span>{stats?.bookings.byStatus.completed || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm flex items-center gap-2"><XCircle className="h-3 w-3 text-destructive" />Otkazano</span><span>{stats?.bookings.byStatus.cancelled || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm flex items-center gap-2"><XCircle className="h-3 w-3 text-warning" />Nije došao</span><span>{stats?.bookings.byStatus.noshow || 0}</span></div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-muted-foreground">Online zakazivanja:</span>
+                    <span className="font-medium">{stats?.engagement.onlineBookingRate || 0}%</span>
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${stats?.engagement.onlineBookingRate || 0}%` }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-sm text-muted-foreground">Stopa završavanja:</span>
+                    <span className="font-medium">{stats?.engagement.completionRate || 0}%</span>
+                  </div>
+                  <div className="w-full bg-secondary rounded-full h-2">
+                    <div className="bg-success rounded-full h-2 transition-all" style={{ width: `${stats?.engagement.completionRate || 0}%` }} />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground pt-1">
+                  Online = zakazano preko platforme (ima link za upravljanje)
+                </p>
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-sm">Prihod salona</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Profil salona</CardTitle></CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Ukupno:</span><span className="font-bold">{(stats?.revenue.total || 0).toLocaleString('sr-RS')} RSD</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Ovaj mesec:</span><span className="font-medium">{(stats?.revenue.thisMonth || 0).toLocaleString('sr-RS')} RSD</span></div>
-                <div className="pt-2 border-t">
-                  <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Broj usluga:</span><span>{stats?.services.total || 0}</span></div>
-                  <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Aktivnih:</span><span>{stats?.services.active || 0}</span></div>
+                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Broj usluga:</span><span className="font-medium">{stats?.services.total || 0}</span></div>
+                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Aktivnih:</span><span className="text-success">{stats?.services.active || 0}</span></div>
+                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Radnih dana:</span><span>{stats?.activity.workingDays || 0}</span></div>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-muted-foreground">Poslednja aktivnost:</span>
+                  <span className="text-sm">{stats?.bookings.lastActivityDate ? new Date(stats.bookings.lastActivityDate).toLocaleDateString('sr-RS') : 'Nema'}</span>
                 </div>
               </CardContent>
             </Card>

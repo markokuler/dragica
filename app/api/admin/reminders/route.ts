@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
 
 // Get all reminders
 export async function GET(request: NextRequest) {
@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const tenantId = searchParams.get('tenantId')
 
     const supabase = createAdminClient()
+    const demoTenantIds = await getDemoTenantIds(user)
 
     let query = supabase
       .from('admin_reminders')
@@ -33,6 +34,10 @@ export async function GET(request: NextRequest) {
 
     if (tenantId) {
       query = query.eq('tenant_id', tenantId)
+    }
+
+    if (demoTenantIds) {
+      query = query.in('tenant_id', demoTenantIds)
     }
 
     const { data: reminders, error } = await query

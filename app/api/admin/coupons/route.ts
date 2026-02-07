@@ -12,10 +12,18 @@ export async function GET() {
 
     const supabase = createAdminClient()
 
-    const { data: coupons, error } = await supabase
+    let query = supabase
       .from('coupons')
       .select('*')
       .order('created_at', { ascending: false })
+
+    if (user.is_demo) {
+      query = query.eq('is_demo', true)
+    } else {
+      query = query.eq('is_demo', false)
+    }
+
+    const { data: coupons, error } = await query
 
     if (error) {
       console.error('Error fetching coupons:', error)
@@ -57,6 +65,7 @@ export async function POST(request: NextRequest) {
         valid_until: valid_until || null,
         description: description || null,
         is_active: true,
+        is_demo: user.is_demo || false,
       })
       .select()
       .single()

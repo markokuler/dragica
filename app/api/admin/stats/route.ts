@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
 
 export async function GET() {
   try {
@@ -16,11 +16,19 @@ export async function GET() {
     const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
+    const demoTenantIds = await getDemoTenantIds(user)
+
     // Get all tenants
-    const { data: tenants, error: tenantsError } = await supabase
+    let tenantsQuery = supabase
       .from('tenants')
-      .select('id, name, email, is_active, subscription_status, subscription_expires_at, created_at, last_booking_at')
+      .select('id, name, email, is_active, subscription_status, subscription_expires_at, created_at')
       .order('created_at', { ascending: false })
+
+    if (demoTenantIds) {
+      tenantsQuery = tenantsQuery.in('id', demoTenantIds)
+    }
+
+    const { data: tenants, error: tenantsError } = await tenantsQuery
 
     if (tenantsError) {
       console.error('Error fetching tenants:', tenantsError)
@@ -54,30 +62,44 @@ export async function GET() {
       new Date(t.created_at) >= startOfMonth
     ).length
 
+    // Get last booking date per tenant for dormant detection
+    let lastBookingQuery = supabase
+      .from('bookings')
+      .select('tenant_id, start_datetime')
+      .gte('start_datetime', thirtyDaysAgo.toISOString())
+      .in('status', ['pending', 'confirmed', 'completed'])
+
+    if (demoTenantIds) {
+      lastBookingQuery = lastBookingQuery.in('tenant_id', demoTenantIds)
+    }
+
+    const { data: recentBookings } = await lastBookingQuery
+    const tenantsWithRecentBookings = new Set(
+      (recentBookings || []).map(b => b.tenant_id)
+    )
+
     // Inactive salons (no bookings in 30+ days)
     const dormantSalons = allTenants.filter(t =>
-      t.is_active &&
-      (!t.last_booking_at || new Date(t.last_booking_at) < thirtyDaysAgo)
+      t.is_active && !tenantsWithRecentBookings.has(t.id)
     )
 
     // Get bookings count
-    const { count: totalBookings } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true })
+    let totalBookingsQuery = supabase.from('bookings').select('*', { count: 'exact', head: true })
+    let bookingsThisMonthQuery = supabase.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', startOfMonth.toISOString())
+    let bookingsLastMonthQuery = supabase.from('bookings').select('*', { count: 'exact', head: true }).gte('created_at', startOfLastMonth.toISOString()).lt('created_at', startOfMonth.toISOString())
 
-    const { count: bookingsThisMonth } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startOfMonth.toISOString())
+    if (demoTenantIds) {
+      totalBookingsQuery = totalBookingsQuery.in('tenant_id', demoTenantIds)
+      bookingsThisMonthQuery = bookingsThisMonthQuery.in('tenant_id', demoTenantIds)
+      bookingsLastMonthQuery = bookingsLastMonthQuery.in('tenant_id', demoTenantIds)
+    }
 
-    const { count: bookingsLastMonth } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true })
-      .gte('created_at', startOfLastMonth.toISOString())
-      .lt('created_at', startOfMonth.toISOString())
+    const { count: totalBookings } = await totalBookingsQuery
+    const { count: bookingsThisMonth } = await bookingsThisMonthQuery
+    const { count: bookingsLastMonth } = await bookingsLastMonthQuery
 
     // Calculate MRR from active subscriptions
-    const { data: subscriptions } = await supabase
+    let subsQuery = supabase
       .from('tenant_subscriptions')
       .select(`
         tenant_id,
@@ -89,6 +111,12 @@ export async function GET() {
         )
       `)
       .eq('status', 'active')
+
+    if (demoTenantIds) {
+      subsQuery = subsQuery.in('tenant_id', demoTenantIds)
+    }
+
+    const { data: subscriptions } = await subsQuery
 
     let mrr = 0
     if (subscriptions) {
@@ -103,38 +131,23 @@ export async function GET() {
     }
 
     // Get last month MRR for comparison (simplified - use payments)
-    const { data: lastMonthPayments } = await supabase
-      .from('payments')
-      .select('amount')
-      .gte('payment_date', startOfLastMonth.toISOString())
-      .lt('payment_date', startOfMonth.toISOString())
+    let lastMonthPaymentsQuery = supabase.from('payments').select('amount').gte('payment_date', startOfLastMonth.toISOString()).lt('payment_date', startOfMonth.toISOString())
+    let thisMonthPaymentsQuery = supabase.from('payments').select('amount').gte('payment_date', startOfMonth.toISOString())
+    let recentPaymentsQuery = supabase.from('payments').select(`id, amount, payment_date, tenants (name), subscription_plans (name)`).order('payment_date', { ascending: false }).limit(5)
 
+    if (demoTenantIds) {
+      lastMonthPaymentsQuery = lastMonthPaymentsQuery.in('tenant_id', demoTenantIds)
+      thisMonthPaymentsQuery = thisMonthPaymentsQuery.in('tenant_id', demoTenantIds)
+      recentPaymentsQuery = recentPaymentsQuery.in('tenant_id', demoTenantIds)
+    }
+
+    const { data: lastMonthPayments } = await lastMonthPaymentsQuery
     const lastMonthRevenue = lastMonthPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
 
-    // Get this month revenue
-    const { data: thisMonthPayments } = await supabase
-      .from('payments')
-      .select('amount')
-      .gte('payment_date', startOfMonth.toISOString())
-
+    const { data: thisMonthPayments } = await thisMonthPaymentsQuery
     const thisMonthRevenue = thisMonthPayments?.reduce((sum, p) => sum + (p.amount || 0), 0) || 0
 
-    // Recent payments (last 5)
-    const { data: recentPayments } = await supabase
-      .from('payments')
-      .select(`
-        id,
-        amount,
-        payment_date,
-        tenants (
-          name
-        ),
-        subscription_plans (
-          name
-        )
-      `)
-      .order('payment_date', { ascending: false })
-      .limit(5)
+    const { data: recentPayments } = await recentPaymentsQuery
 
     const formattedRecentPayments = (recentPayments || []).map(p => {
       const tenant = p.tenants as unknown as { name: string } | null
@@ -178,7 +191,7 @@ export async function GET() {
 
     // Get reminders due today or overdue
     const today = now.toISOString().split('T')[0]
-    const { data: reminders } = await supabase
+    let remindersQuery = supabase
       .from('admin_reminders')
       .select(`
         id,
@@ -193,6 +206,12 @@ export async function GET() {
       .lte('reminder_date', today)
       .order('reminder_date', { ascending: true })
       .limit(5)
+
+    if (demoTenantIds) {
+      remindersQuery = remindersQuery.in('tenant_id', demoTenantIds)
+    }
+
+    const { data: reminders } = await remindersQuery
 
     const dueReminders = (reminders || []).map(r => {
       const tenant = r.tenants as unknown as { name: string } | null
@@ -236,7 +255,6 @@ export async function GET() {
       dormantSalons: dormantSalons.slice(0, 5).map(s => ({
         id: s.id,
         name: s.name,
-        last_booking_at: s.last_booking_at,
       })),
       mrr: Math.round(mrr),
       thisMonthRevenue,

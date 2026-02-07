@@ -42,13 +42,6 @@ export async function GET(
       .gte('start_datetime', startOfLastMonth)
       .lt('start_datetime', startOfMonth)
 
-    // Get completed bookings (revenue source)
-    const { count: completedBookings } = await supabase
-      .from('bookings')
-      .select('*', { count: 'exact', head: true })
-      .eq('tenant_id', id)
-      .eq('status', 'completed')
-
     // Get unique clients count
     const { data: clientsData } = await supabase
       .from('customers')
@@ -70,7 +63,7 @@ export async function GET(
       .eq('tenant_id', id)
       .eq('is_active', true)
 
-    // Get last booking
+    // Get last booking date (last activity)
     const { data: lastBookingData } = await supabase
       .from('bookings')
       .select('start_datetime')
@@ -79,73 +72,29 @@ export async function GET(
       .limit(1)
       .single()
 
-    // Get bookings by status
-    const { data: statusCounts } = await supabase
+    // Engagement: online booking rate (bookings with manage_token vs total)
+    const { count: onlineBookings } = await supabase
       .from('bookings')
-      .select('status')
+      .select('*', { count: 'exact', head: true })
       .eq('tenant_id', id)
+      .not('manage_token', 'is', null)
 
-    const bookingsByStatus = {
-      pending: 0,
-      confirmed: 0,
-      completed: 0,
-      cancelled: 0,
-      noshow: 0,
-    }
+    const onlineBookingRate = (totalBookings && totalBookings > 0)
+      ? Math.round(((onlineBookings || 0) / totalBookings) * 100)
+      : 0
 
-    if (statusCounts) {
-      statusCounts.forEach((b) => {
-        const status = b.status as keyof typeof bookingsByStatus
-        if (status in bookingsByStatus) {
-          bookingsByStatus[status]++
-        }
-      })
-    }
-
-    // Calculate revenue (sum of completed bookings)
-    const { data: revenueData } = await supabase
+    // Engagement: completion rate (completed / total, as percentage)
+    const { count: completedBookings } = await supabase
       .from('bookings')
-      .select(`
-        services (
-          price
-        )
-      `)
+      .select('*', { count: 'exact', head: true })
       .eq('tenant_id', id)
       .eq('status', 'completed')
 
-    let totalRevenue = 0
-    if (revenueData) {
-      revenueData.forEach((booking) => {
-        const service = booking.services as unknown as { price: number } | null
-        if (service?.price) {
-          totalRevenue += service.price
-        }
-      })
-    }
+    const completionRate = (totalBookings && totalBookings > 0)
+      ? Math.round(((completedBookings || 0) / totalBookings) * 100)
+      : 0
 
-    // Get this month's revenue
-    const { data: monthRevenueData } = await supabase
-      .from('bookings')
-      .select(`
-        services (
-          price
-        )
-      `)
-      .eq('tenant_id', id)
-      .eq('status', 'completed')
-      .gte('start_datetime', startOfMonth)
-
-    let monthRevenue = 0
-    if (monthRevenueData) {
-      monthRevenueData.forEach((booking) => {
-        const service = booking.services as unknown as { price: number } | null
-        if (service?.price) {
-          monthRevenue += service.price
-        }
-      })
-    }
-
-    // Get owner's last activity (from users table)
+    // Get owner's created_at (from users table)
     const { data: ownerData } = await supabase
       .from('users')
       .select('created_at')
@@ -166,11 +115,9 @@ export async function GET(
           total: totalBookings || 0,
           thisMonth: monthBookings || 0,
           lastMonth: lastMonthBookings || 0,
-          completed: completedBookings || 0,
-          byStatus: bookingsByStatus,
-          lastBooking: lastBookingData ? {
-            date: lastBookingData.start_datetime,
-          } : null,
+          lastActivityDate: lastBookingData?.start_datetime
+            ? lastBookingData.start_datetime.split('T')[0]
+            : null,
         },
         clients: {
           total: clientCount,
@@ -179,9 +126,9 @@ export async function GET(
           total: servicesCount || 0,
           active: activeServicesCount || 0,
         },
-        revenue: {
-          total: totalRevenue,
-          thisMonth: monthRevenue,
+        engagement: {
+          onlineBookingRate,
+          completionRate,
         },
         activity: {
           ownerCreatedAt: ownerData?.created_at || null,

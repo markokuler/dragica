@@ -11,11 +11,19 @@ export async function GET() {
 
     const supabase = createAdminClient()
 
-    // Get admin financial entries
-    const { data: entries, error } = await supabase
+    // Get admin financial entries - demo admin sees demo entries only
+    let query = supabase
       .from('admin_financial_entries')
       .select('*')
       .order('entry_date', { ascending: false })
+
+    if (user.is_demo) {
+      query = query.eq('is_demo', true)
+    } else {
+      query = query.eq('is_demo', false)
+    }
+
+    const { data: entries, error } = await query
 
     if (error) {
       console.error('Error fetching admin finances:', error)
@@ -53,6 +61,7 @@ export async function POST(request: NextRequest) {
         amount: parseFloat(amount),
         description: description || null,
         entry_date,
+        is_demo: user.is_demo || false,
       })
       .select()
       .single()

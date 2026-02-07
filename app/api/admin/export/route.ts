@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type')
 
     const supabase = createAdminClient()
+    const demoTenantIds = await getDemoTenantIds(user)
 
     if (type === 'salons') {
-      const { data: salons, error } = await supabase
+      let salonsQuery = supabase
         .from('tenants')
         .select(`
           id,
@@ -30,6 +31,12 @@ export async function GET(request: NextRequest) {
           created_at
         `)
         .order('name')
+
+      if (demoTenantIds) {
+        salonsQuery = salonsQuery.in('id', demoTenantIds)
+      }
+
+      const { data: salons, error } = await salonsQuery
 
       if (error) throw error
 
@@ -58,7 +65,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === 'payments') {
-      const { data: payments, error } = await supabase
+      let paymentsQuery = supabase
         .from('payments')
         .select(`
           id,
@@ -74,6 +81,12 @@ export async function GET(request: NextRequest) {
           )
         `)
         .order('payment_date', { ascending: false })
+
+      if (demoTenantIds) {
+        paymentsQuery = paymentsQuery.in('tenant_id', demoTenantIds)
+      }
+
+      const { data: payments, error } = await paymentsQuery
 
       if (error) throw error
 
@@ -101,6 +114,17 @@ export async function GET(request: NextRequest) {
     }
 
     if (type === 'finances') {
+      // Demo admin cannot export platform finances
+      if (demoTenantIds) {
+        const csv = 'Datum,Tip,Kategorija,Iznos (RSD),Opis'
+        return new NextResponse(csv, {
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="finansije_${new Date().toISOString().split('T')[0]}.csv"`,
+          },
+        })
+      }
+
       const { data: entries, error } = await supabase
         .from('admin_financial_entries')
         .select('*')

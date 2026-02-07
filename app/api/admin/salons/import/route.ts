@@ -121,8 +121,8 @@ export async function POST(request: NextRequest) {
           continue
         }
 
-        // Create user record
-        const { error: userError } = await supabase.from('users').insert({
+        // Create user record (upsert in case auth trigger already created it)
+        const { error: userError } = await supabase.from('users').upsert({
           id: authData.user.id,
           email: salon.vlasnik_email,
           role: 'client',

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { requireAdmin } from '@/lib/auth'
+import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
 
 export async function GET() {
   try {
@@ -10,8 +10,9 @@ export async function GET() {
     }
 
     const supabase = createAdminClient()
+    const demoTenantIds = await getDemoTenantIds(user)
 
-    const { data: payments, error } = await supabase
+    let query = supabase
       .from('payments')
       .select(`
         id,
@@ -28,6 +29,12 @@ export async function GET() {
         )
       `)
       .order('payment_date', { ascending: false })
+
+    if (demoTenantIds) {
+      query = query.in('tenant_id', demoTenantIds)
+    }
+
+    const { data: payments, error } = await query
 
     if (error) {
       console.error('Error fetching payments:', error)

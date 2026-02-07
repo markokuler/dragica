@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, duration_days, price, is_trial, is_active } = body
+    const { name, duration_days, price, is_trial, is_active, features } = body
 
     if (!name || !duration_days || price === undefined) {
       return NextResponse.json({ error: 'Sva obavezna polja moraju biti popunjena' }, { status: 400 })
@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
         price: parseFloat(price),
         is_trial: is_trial || false,
         is_active: is_active !== false,
+        features: features || [],
       })
       .select()
       .single()
