@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,14 +36,11 @@ export default function LoginPage() {
       }
 
       if (data.user) {
-        // Get user role
-        const { data: userData } = await supabase
-          .from('users')
-          .select('role')
-          .eq('id', data.user.id)
-          .single()
+        // Get user role via server-side API (bypasses RLS)
+        const roleRes = await fetch('/api/auth/role')
+        const roleData = await roleRes.json()
 
-        if (userData?.role === 'admin') {
+        if (roleData?.role === 'admin') {
           router.push('/admin')
         } else {
           router.push('/dashboard')
@@ -134,10 +132,13 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Footer text */}
-        <p className="text-center text-sm text-foreground/50 mt-6 font-medium">
-          Salon Management System
-        </p>
+        {/* Back to home */}
+        <Link
+          href="/"
+          className="block mt-5 py-3 text-center text-sm font-bold text-foreground border-3 border-foreground rounded-lg bg-white shadow-[3px_3px_0px_#1B4332] hover:shadow-[4px_4px_0px_#1B4332] hover:translate-x-[-1px] hover:translate-y-[-1px] active:shadow-[1px_1px_0px_#1B4332] active:translate-x-[1px] active:translate-y-[1px] transition-all"
+        >
+          ← Nazad na početnu
+        </Link>
       </div>
     </div>
   )

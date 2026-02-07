@@ -94,6 +94,19 @@ export async function requireClient() {
   return userData
 }
 
+// Get demo tenant IDs for filtering (returns null if user is not demo)
+export async function getDemoTenantIds(userData: { is_demo?: boolean }): Promise<string[] | null> {
+  if (!userData.is_demo) return null
+
+  const adminClient = createAdminClient()
+  const { data: demoTenants } = await adminClient
+    .from('tenants')
+    .select('id')
+    .eq('is_demo', true)
+
+  return demoTenants?.map(t => t.id) || []
+}
+
 export async function signOut() {
   const supabase = await createClient()
   await supabase.auth.signOut()
