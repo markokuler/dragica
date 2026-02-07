@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUserWithRole, getEffectiveTenantId } from '@/lib/auth'
-import { getStoredPhoneVariations, cleanPhoneNumber } from '@/lib/phone-utils'
+import { normalizePhoneForDB, cleanPhoneNumber } from '@/lib/phone-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,12 +30,10 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     if (search) {
-      // For phone search, also check variations
       const isPhoneSearch = /^\+?\d+$/.test(search.replace(/[\s\-()]/g, ''))
       if (isPhoneSearch) {
-        const phoneVariations = getStoredPhoneVariations(search)
-        const phoneConditions = phoneVariations.map(v => `phone.ilike.%${v}%`).join(',')
-        query = query.or(`${phoneConditions},name.ilike.%${search}%`)
+        const normalized = normalizePhoneForDB(search)
+        query = query.or(`phone_normalized.ilike.%${normalized}%,name.ilike.%${search}%`)
       } else {
         query = query.or(`phone.ilike.%${search}%,name.ilike.%${search}%`)
       }
@@ -120,14 +118,14 @@ export async function POST(request: NextRequest) {
 
     // Clean phone number - expect international format from dashboard
     const cleanedPhone = phone.startsWith('+') ? phone : `+${cleanPhoneNumber(phone)}`
-    const phoneVariations = getStoredPhoneVariations(cleanedPhone)
+    const normalized = normalizePhoneForDB(cleanedPhone)
 
-    // Check if client with this phone already exists (check all variations)
+    // Check if client with this phone already exists via normalized column
     const { data: existing } = await supabase
       .from('customers')
       .select('id')
       .eq('tenant_id', tenantId)
-      .in('phone', phoneVariations)
+      .eq('phone_normalized', normalized)
       .limit(1)
       .single()
 

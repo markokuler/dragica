@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sendBookingConfirmation, NotificationChannel } from '@/lib/infobip/client'
-import { getStoredPhoneVariations, cleanPhoneNumber } from '@/lib/phone-utils'
+import { normalizePhoneForDB, cleanPhoneNumber } from '@/lib/phone-utils'
 import { format } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 import { randomUUID } from 'crypto'
@@ -99,18 +99,18 @@ export async function POST(
     }
 
     // Phone is already in international format (+381...) from frontend
-    // Clean it just in case and get variations for lookup
+    // Clean it just in case and normalize for lookup
     const cleanedPhone = phone.startsWith('+') ? phone : `+${cleanPhoneNumber(phone)}`
-    const phoneVariations = getStoredPhoneVariations(cleanedPhone)
+    const normalized = normalizePhoneForDB(cleanedPhone)
 
-    // Find or create customer - search by all phone variations
+    // Find or create customer via normalized phone
     let customerId: string
 
     const { data: existingCustomer } = await supabase
       .from('customers')
       .select('id, phone')
       .eq('tenant_id', tenant.id)
-      .in('phone', phoneVariations)
+      .eq('phone_normalized', normalized)
       .limit(1)
       .single()
 

@@ -22,7 +22,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, Globe, UserPen } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Plus, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, Globe, UserPen, Trash2 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, subMonths, subDays, isSameDay, isSameMonth } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 import {
@@ -218,6 +228,40 @@ function FinancesPageContent() {
       entry_date: entry.entry_date,
     })
     setDialogOpen(true)
+  }
+
+  // Delete state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [entryToDelete, setEntryToDelete] = useState<FinancialEntry | null>(null)
+
+  const handleDeleteEntry = (entry: FinancialEntry) => {
+    setEntryToDelete(entry)
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteEntry = async () => {
+    if (!entryToDelete) return
+
+    try {
+      const response = await fetch(`/api/dashboard/finances/${entryToDelete.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setDialogOpen(false)
+        setEditingEntry(null)
+        fetchEntries()
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Greška pri brisanju unosa')
+      }
+    } catch (error) {
+      console.error('Error deleting entry:', error)
+      alert('Greška pri brisanju unosa')
+    } finally {
+      setDeleteDialogOpen(false)
+      setEntryToDelete(null)
+    }
   }
 
   // Calculate stats
@@ -860,6 +904,17 @@ function FinancesPageContent() {
             </div>
 
             <DialogFooter className="gap-2">
+              {editingEntry && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="sm:mr-auto"
+                  onClick={() => handleDeleteEntry(editingEntry)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Obriši
+                </Button>
+              )}
               <Button type="button" variant="outline" onClick={() => {
                 setDialogOpen(false)
                 setEditingEntry(null)
@@ -871,6 +926,28 @@ function FinancesPageContent() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Entry Confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Brisanje transakcije</AlertDialogTitle>
+            <AlertDialogDescription>
+              Da li ste sigurni da želite da obrišete {entryToDelete?.type === 'income' ? 'prihod' : 'rashod'} od {entryToDelete ? Number(entryToDelete.amount).toLocaleString('sr-RS') : ''} RSD ({entryToDelete ? (CATEGORY_LABELS[entryToDelete.category] || entryToDelete.category) : ''})?
+              Ova akcija se ne može poništiti.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Odustani</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteEntry}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Obriši
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

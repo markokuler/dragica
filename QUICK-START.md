@@ -1,153 +1,130 @@
 # Dragica - Quick Start Guide
 
-## Live Application
+## URLs
 
-**Production:** https://dragica-web-app.vercel.app
-**Repository:** https://github.com/markokuler/dragica
+| Environment | URL |
+|-------------|-----|
+| **Production** | https://dragica.app |
+| **Staging** | Vercel Preview (SSO) |
+| **Local** | http://localhost:3000 |
+| **Repository** | https://github.com/markokuler/dragica |
 
 ---
 
 ## What's Built
 
-### ✅ Phase 1: Admin Panel
-- Salon management (create, edit, delete, toggle active)
-- User management
+### Core Platform (Phase 1-4)
+- Admin Panel - full salon management, CRM, finances
+- Salon Dashboard - services, clients, bookings, calendar, finances, settings
+- Public Booking - 3-step flow with availability checking
+- Branding - custom themes, logos, colors per salon
 
-### ✅ Phase 2: Salon Owner Dashboard
-- Services management
-- Clients CRM with booking history
-- Bookings management with status updates
-- Calendar view
-- Working hours configuration
-- Blocked slots management
-- Financial tracking
-
-### ✅ Phase 3: Public Booking
-- 3-step booking flow
-- Real-time availability checking
-- Mobile responsive design
-
-### ✅ Phase 4: Branding
-- Logo and banner upload
-- Custom colors and presets
-- Button styles and themes
-- Welcome message
+### Expansion (Phase 5-7)
+- Admin expansion (analytics, CRM, promotions, audit, subscriptions)
+- Demo system (demo login, daily cron reset)
+- 3-environment setup (lokal/staging/production)
 
 ---
 
-## Local Development Setup
+## Local Development
 
-### Step 1: Clone & Install
+### Prerequisites
+- Docker Desktop
+- Node.js 18+ (via nvm)
+- Supabase CLI (`npm install -g supabase`)
+
+### Setup
 
 ```bash
 git clone https://github.com/markokuler/dragica.git
 cd dragica
 npm install
-```
 
-### Step 2: Set Up Supabase
+# Create .env.local (copy from .env.example and update)
 
-1. Go to https://supabase.com and create a new project
-2. Go to **SQL Editor** and run `supabase-schema.sql`
-3. Create storage bucket `salon-assets` (public access)
-4. Go to **Project Settings** → **API** and copy credentials
-
-### Step 3: Configure Environment
-
-Create `.env.local`:
-
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-### Step 4: Create Admin User
-
-In Supabase Dashboard:
-1. Go to **Authentication** → **Users** → **Add user**
-2. Create user with email/password
-3. Copy the user ID
-4. Run in SQL Editor:
-
-```sql
-INSERT INTO users (id, email, role)
-VALUES ('paste-user-id-here', 'your@email.com', 'admin');
-```
-
-### Step 5: Run
-
-```bash
-npm run dev
+supabase start       # Start Docker Supabase
+supabase db reset    # Load migrations + seed data
+npm run dev          # Start Next.js
 ```
 
 Open http://localhost:3000
 
----
+### Test Accounts
 
-## Application URLs
-
-| URL | Description |
-|-----|-------------|
-| `/login` | Login page |
-| `/admin` | Admin panel (admin users) |
-| `/dashboard` | Salon dashboard (salon owners) |
-| `/dashboard/brendiranje` | Branding settings |
-| `/book/[slug]` | Public booking page |
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | admin@dragica.local | admin123 |
+| Salon Owner | milana@test.local | test1234 |
+| Demo Admin | demo-admin@dragica.local | demo1234 |
+| Demo Salon | demo-salon@dragica.local | demo1234 |
 
 ---
 
 ## Quick Test Flow
 
-1. **Admin**: Log in → Create a salon
-2. **Salon Owner**: Log in as the owner → Add services → Set working hours
-3. **Customize**: Go to Brendiranje → Upload logo → Pick colors
-4. **Public**: Visit `/book/[salon-slug]` → Book an appointment
-5. **Verify**: Check dashboard → See the new booking
+1. **Landing**: Visit `/` - see demo buttons
+2. **Demo Admin**: Click "Demo Admin" -> auto-login -> `/admin`
+3. **Admin**: See salon list, create salon (dialog), manage salons
+4. **Demo Salon**: Click "Demo Salon" -> auto-login -> `/dashboard`
+5. **Dashboard**: See stats, calendar, clients, finances
+6. **Booking**: Visit `/book/milana-nails` -> book appointment
+7. **Verify**: Check dashboard -> see new booking in calendar
 
 ---
 
-## Dashboard Navigation (Serbian)
+## Navigation (Serbian)
 
-| Menu Item | Feature |
-|-----------|---------|
-| Pregled | Dashboard overview |
-| Kalendar | Calendar view |
+### Admin
+| Menu | Feature |
+|------|---------|
+| Saloni | Salon management |
+| Finansije | Platform finances |
+| Analitika | Analytics |
+| Promocije | Coupons |
+| Izvestaji | Reports/Export |
+| Aktivnost | Audit log |
+| Podesavanja | Settings |
+
+### Dashboard
+| Menu | Feature |
+|------|---------|
+| Pregled | Overview |
+| Kalendar | Calendar + bookings |
 | Usluge | Services |
 | Klijenti | Clients CRM |
-| Zakazivanja | Bookings |
 | Finansije | Finances |
-| Brendiranje | Branding |
-| Podešavanja | Settings (hours, blocked slots) |
-
----
-
-## Commands
-
-```bash
-npm run dev      # Development server
-npm run build    # Production build
-npm run start    # Start production
-npm run test     # Run tests
-```
-
----
-
-## Documentation
-
-- **README.md** - Full documentation
-- **QA_DOCUMENTATION.md** - QA testing guide (80+ test scenarios)
-- **supabase-schema.sql** - Database schema
+| Podesavanja | Settings (general, hours, branding) |
 
 ---
 
 ## Deployment
 
-Automatic deployment via Vercel:
-1. Push to `main` branch
-2. Vercel auto-builds and deploys
-3. Live at https://dragica-web-app.vercel.app
+```bash
+# Staging
+git push origin staging          # Vercel auto-deploy (Preview)
+
+# Production
+git checkout main
+git merge staging
+git push origin main             # Vercel auto-deploy (Production)
+
+# Migrations (if new)
+supabase link --project-ref <ref>
+supabase db push --dry-run       # ALWAYS dry-run first
+supabase db push
+```
+
+See `DEPLOY.md` for full deployment guide.
 
 ---
 
-**Status:** All 4 phases complete!
+## Documentation
+
+| File | Content |
+|------|---------|
+| README.md | Full project overview |
+| QA_DOCUMENTATION.md | QA testing (100+ scenarios) |
+| TESTING-PLAN.md | Testing strategy |
+| DEPLOY.md | Deployment procedures |
+| LOCAL-DEV.md | Local dev environment |
+| MIGRATION-WSL2.md | WSL2 migration guide |

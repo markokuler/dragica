@@ -1,39 +1,56 @@
 # Dragica - QA Documentation
 
-**Version:** 2.0
-**Last Updated:** February 4, 2026
-**Application Type:** Multi-tenant SaaS for Nail Salons
-**Tech Stack:** Next.js 16, Supabase, TypeScript, Tailwind CSS v4, shadcn/ui
+**Version:** 3.0
+**Last Updated:** February 7, 2026
+**Application Type:** Multi-tenant SaaS for Beauty Salons
+**Tech Stack:** Next.js 16, Supabase, TypeScript, Tailwind CSS 4, shadcn/ui
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [User Roles](#user-roles)
-3. [Application Structure](#application-structure)
-4. [Completed Features](#completed-features)
-5. [Test Scenarios](#test-scenarios)
-6. [API Endpoints](#api-endpoints)
-7. [Database Schema](#database-schema)
-8. [Mobile Responsive Testing](#mobile-responsive-testing)
+2. [Environments](#environments)
+3. [User Roles](#user-roles)
+4. [Application Structure](#application-structure)
+5. [Completed Features](#completed-features)
+6. [Test Scenarios](#test-scenarios)
+7. [API Endpoints](#api-endpoints)
+8. [Database Schema](#database-schema)
+9. [Demo System](#demo-system)
+10. [Mobile Responsive Testing](#mobile-responsive-testing)
 
 ---
 
 ## Overview
 
-Dragica is a multi-tenant SaaS application designed for nail salons to manage their business operations and allow clients to book appointments online. Each salon (tenant) has isolated data and a customizable public booking page.
+Dragica is a multi-tenant SaaS application designed for beauty salons (nails, hair, cosmetics) on the Serbian market. Each salon (tenant) has isolated data, customizable public booking page, and full business management tools.
 
 **Branding:**
 - Logo text: "Dragica"
-- Slogan: "Tvoja pomoćnica"
+- Slogan: "Tvoja pomocnica"
 - Theme: Dark grey (#181920) + Gold accent (#CDA661)
 - Font: Poppins
 - Language: Serbian (Latin)
 
-**Production URL:** https://dragica-web-app.vercel.app
-**Repository:** https://github.com/markokuler/dragica
-**Local Development:** `http://localhost:3000`
+---
+
+## Environments
+
+| Environment | URL | Database | Deploy |
+|-------------|-----|----------|--------|
+| **Production** | https://dragica.app | Supabase `dakmcfvhsfshkssmeqoy` | `git push origin main` |
+| **Staging** | Vercel Preview (SSO protected) | Supabase `ammlbwvefnylqvorrilr` | `git push origin staging` |
+| **Local** | http://localhost:3000 | Docker (`supabase start`) | `npm run dev` |
+
+### Test Accounts (Local + Staging)
+
+| Account | Email | Password | Role |
+|---------|-------|----------|------|
+| Admin | admin@dragica.local | admin123 | admin |
+| Salon Owner | milana@test.local | test1234 | client |
+| Demo Admin | demo-admin@dragica.local | demo1234 | admin (is_demo) |
+| Demo Salon | demo-salon@dragica.local | demo1234 | client (is_demo) |
 
 ---
 
@@ -41,7 +58,7 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 
 | Role | Description | Access |
 |------|-------------|--------|
-| **Admin** | Platform administrator | `/admin/*` - Manage all salons |
+| **Admin** | Platform administrator | `/admin/*` - Manage all salons, finances, analytics |
 | **Salon Owner (Client)** | Salon business owner | `/dashboard/*` - Manage own salon |
 | **Public User** | End customer | `/book/[slug]` - Book appointments |
 
@@ -49,300 +66,150 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 
 ## Application Structure
 
-### Dashboard Pages
+### Admin Pages (10 pages)
+```
+/admin                  - Dashboard (stats overview)
+/admin/saloni           - Lista salona + Novi salon (dialog)
+/admin/saloni/novi      - Novi salon (full page form)
+/admin/saloni/[id]      - Salon detail (5 tabs: pregled, crm, uplate, statistika, podesavanja)
+/admin/saloni/[id]/services     - Usluge salona
+/admin/saloni/[id]/hours        - Radno vreme salona
+/admin/saloni/[id]/blocked-slots - Blokirani slotovi
+/admin/saloni/[id]/settings     - Podešavanja salona
+/admin/finansije        - Platform finansije
+/admin/analitika        - Analitika po salonu
+/admin/promocije        - Kuponi i popusti
+/admin/izvestaji        - Izveštaji i export
+/admin/aktivnost        - Audit log (aktivnost korisnika)
+/admin/podesavanja      - Admin podešavanja (nalog, lozinka, app)
+/admin/settings         - App settings
+```
+
+### Dashboard Pages (6 pages)
 ```
 /dashboard              - Pregled (Overview)
 /dashboard/kalendar     - Kalendar + Evidencija zakazivanja
 /dashboard/usluge       - Usluge (Services)
-/dashboard/klijenti     - Klijenti (Clients)
+/dashboard/klijenti     - Klijenti (Clients CRM)
 /dashboard/finansije    - Finansije (Finances)
-/dashboard/podesavanja  - Podešavanja (Settings)
-  └── Tab: Opšte        - General settings
-  └── Tab: Radno vreme  - Working hours + Blocked slots
-  └── Tab: Brendiranje  - Branding/customization
+/dashboard/podesavanja  - Podešavanja (3 tabs: Opšte, Radno vreme, Brendiranje)
 ```
 
-### Removed/Merged Pages
-- ~~`/dashboard/zakazivanja`~~ → Merged into `/dashboard/kalendar`
-- ~~`/dashboard/brendiranje`~~ → Merged into `/dashboard/podesavanja` (tab)
-- ~~`/dashboard/kalendar/novo`~~ → Replaced with popup dialog
+### Public Pages (3 pages)
+```
+/book/[slug]            - Booking flow
+/book/[slug]/potvrda    - Booking confirmation
+/book/[slug]/izmena/[token] - Manage/edit booking
+```
+
+### Other Pages
+```
+/                       - Landing page + demo buttons
+/login                  - Login page
+/setup                  - Initial setup
+```
 
 ---
 
 ## Completed Features
 
-### Phase 1: Admin Panel
+### Phase 1-4: Core Platform
 
-**Location:** `/admin/*`
-**Access:** Admin users only
+#### Admin Panel `/admin/*`
 
 | Feature | Description | URL |
 |---------|-------------|-----|
-| Admin Login | Secure authentication for admins | `/admin/login` |
-| Salon List | View all registered salons | `/admin` |
-| Create Salon | Register new salon with owner account | `/admin` (modal) |
-| Edit Salon | Modify salon details | `/admin` (modal) |
-| Activate/Deactivate Salon | Toggle salon status | `/admin` |
-| Delete Salon | Remove salon from system | `/admin` |
+| Admin Dashboard | Stats overview | `/admin` |
+| Salon List | All salons with search, filters | `/admin/saloni` |
+| Create Salon (Dialog) | Popup form for quick salon creation | `/admin/saloni` (modal) |
+| Create Salon (Full) | Full page form with all details | `/admin/saloni/novi` |
+| Salon Detail | 5-tab detail view (pregled, CRM, uplate, statistika, podešavanja) | `/admin/saloni/[id]` |
+| Salon CRM | Contacts management per salon | `/admin/saloni/[id]?tab=crm` |
+| Brze Akcije | Dropdown: Pregled, CRM, Evidentiraj uplatu, Obriši | `/admin/saloni` |
+| Activate/Deactivate | Toggle salon status | `/admin/saloni` |
+| Import Salons | Bulk import | `/api/admin/salons/import` |
+| Platform Finances | Revenue/expense tracking | `/admin/finansije` |
+| Analytics | Salon statistics | `/admin/analitika` |
+| Promotions | Coupon management | `/admin/promocije` |
+| Subscriptions | Plan management | `/admin/podesavanja` |
+| Audit Log | Activity tracking | `/admin/aktivnost` |
+| Reports/Export | Data export | `/admin/izvestaji` |
 
----
+#### Salon Dashboard `/dashboard/*`
 
-### Phase 2: Salon Owner Dashboard
+| Feature | Description |
+|---------|-------------|
+| Overview | Stats cards, quick actions (popups), upcoming bookings |
+| Calendar | Weekly view, today's bookings, booking indicators |
+| Bookings | Create/edit (popup), status management (pending/confirmed/completed/cancelled/noshow) |
+| Services | CRUD with pricing, duration, active toggle |
+| Clients CRM | Search, notes, notification_channel, booking history, total spent |
+| Finances | Income/expense chart, categories (booking/products/tips/other, supplies/rent/utilities/salaries/marketing/other) |
+| Settings | General info, working hours, blocked slots, branding (6 themes, light/dark) |
 
-**Location:** `/dashboard/*`
-**Access:** Authenticated salon owners only
+#### Public Booking `/book/[slug]`
 
-#### 2.1 Dashboard Overview `/dashboard`
+| Feature | Description |
+|---------|-------------|
+| 3-step flow | Service → Date/Time → Contact |
+| Availability | Real-time checking against working hours, bookings, blocked slots |
+| Branding | Custom colors, logo, themes per salon |
+| Confirmation | Booking details page |
+| Management | Edit/cancel via token URL |
 
-**Layout (2 columns on desktop):**
-- Left column: Stats cards + Quick actions
-- Right column: Upcoming bookings
+### Phase 5-7: Expansion
 
-**Stats Cards:**
-| Card | Content | Click Action |
-|------|---------|--------------|
-| Zakazivanja | Danas: X, Ove nedelje: X | → `/dashboard/kalendar` |
-| Klijenti | Ukupno u bazi: X | → `/dashboard/klijenti` |
-
-**Quick Actions (popup dialogs):**
-| Action | Behavior |
-|--------|----------|
-| Novo zakazivanje | Opens booking popup form |
-| Dodaj uslugu | Opens service popup form |
-| Pregled kalendara | Navigates to `/dashboard/kalendar` |
-| Finansijski izveštaj | Navigates to `/dashboard/finansije` |
-
-**Predstojeći termini:**
-- Shows next 5 upcoming bookings
-- Displays: customer name/phone, service, time, date
-- "Svi termini" button → `/dashboard/kalendar`
-
----
-
-#### 2.2 Calendar & Bookings `/dashboard/kalendar`
-
-**Two Tabs:**
-
-**Tab 1: Kalendar (Calendar View)**
-- Weekly calendar (Monday-Sunday)
-- Navigation: Previous/Next week, "Danas" button
-- Date range displayed in header
-- Bookings shown per day with:
-  - Time
-  - Status badge (color-coded)
-  - Customer name/phone
-  - Service name
-- Today highlighted with accent color
-- Click on booking shows details
-
-**Today's Bookings Section (below calendar):**
-- List of all bookings for current day
-- Each booking shows:
-  - Time
-  - Customer name/phone
-  - Service name
-  - Status badge
-  - Action buttons
-
-**Tab 2: Evidencija (List View)**
-- Filter by status: Svi, Na čekanju, Potvrđeno, Završeno, Otkazano
-- Filter by date
-- "Poništi" button clears filters
-- Table columns: Datum/vreme, Klijent, Usluga, Cena, Status, Akcije
-
-**Booking Status Colors:**
-| Status | Serbian | Color |
-|--------|---------|-------|
-| pending | Na čekanju | Warning (gold) |
-| confirmed | Potvrđeno | Success (teal) |
-| completed | Završeno | Success (teal) |
-| cancelled | Otkazano | Destructive (red) |
-
-**Booking Actions:**
-| Action | Icon | Condition | Behavior |
-|--------|------|-----------|----------|
-| Izmeni | Pencil | pending/confirmed | Opens edit popup |
-| Potvrdi | Button | pending only | Changes to confirmed |
-| Završi | Button | pending/confirmed | Changes to completed |
-| Otkaži | Button | pending/confirmed | Opens AlertDialog confirmation |
-
-**Popup: Novo/Izmeni zakazivanje**
-- Service dropdown (active services only)
-- Customer phone (required)
-- Customer name (optional)
-- Date picker
-- Time picker
-- Service summary (duration, price)
-- Buttons: Otkaži, Zakaži termin / Sačuvaj izmene
-
-**AlertDialog: Otkazivanje termina**
-- Title: "Otkazivanje termina"
-- Warning message
-- Buttons: Odustani, Potvrdi (red)
-
----
-
-#### 2.3 Services `/dashboard/usluge`
-
-**Header:**
-- Title: "Usluge"
-- "Nova usluga" button → opens popup
-
-**Table:**
-| Column | Content |
-|--------|---------|
-| Naziv | Service name |
-| Trajanje | Duration in minutes |
-| Cena | Price in RSD (gold color) |
-| Status | Toggle: Aktivna/Neaktivna |
-| Akcije | Edit (pencil), Delete (trash) |
-
-**Popup: Nova/Izmeni usluga**
-- Naziv usluge (required)
-- Trajanje u minutima (required, min 15, step 15)
-- Cena u RSD (required)
-- Buttons: Otkaži, Dodaj / Sačuvaj
-
-**AlertDialog: Brisanje usluge**
-- Shows service name
-- Warning: "Ova akcija se ne može poništiti"
-- Buttons: Odustani, Obriši (red)
-
----
-
-#### 2.4 Clients `/dashboard/klijenti`
-
-**Header:**
-- Title: "Klijenti"
-- "Novi klijent" button → opens popup
-
-**Stats Cards:**
-| Card | Content |
-|------|---------|
-| Ukupno klijenata | Total count |
-| Ukupno poseta | Sum of all visits |
-| Ukupan promet | Total spent (RSD) |
-
-**Search:**
-- Input field: "Pretražite po imenu ili broju telefona..."
-- "Pretraži" button
-
-**Table:**
-| Column | Content |
-|--------|---------|
-| Telefon | Phone (monospace) |
-| Ime | Name or "-" |
-| Poseta | Number of visits |
-| Potrošeno | Total spent (RSD, gold) |
-| Poslednja poseta | Date or "-" |
-| Akcije | Edit (pencil), Detalji |
-
-**Popup: Novi/Izmeni klijent**
-- Telefon (required)
-- Ime (optional)
-- Buttons: Otkaži, Dodaj klijenta / Sačuvaj
-
-**Dialog: Detalji klijenta**
-- Phone, Name
-- Total visits, Total spent
-- Booking history (scrollable list)
-- Each booking: service, date/time, price, status badge
-
----
-
-#### 2.5 Finances `/dashboard/finansije`
-
-- Revenue chart
-- Transaction table
-- Period filters
-- Total amounts
-
----
-
-#### 2.6 Settings `/dashboard/podesavanja`
-
-**Three Tabs:**
-
-**Tab 1: Opšte (General)**
-- Naziv salona
-- Adresa
-- Telefon
-- Email
-- "Sačuvaj" button
-
-**Tab 2: Radno vreme (Working Hours)**
-
-*Weekly Schedule:*
-- All 7 days displayed in compact grid
-- Each day shows: Day name, Status (Radi/Ne radi), Hours (od-do)
-- Edit button per day → opens dialog
-
-*Dialog: Izmeni radno vreme*
-- Day name in title
-- Toggle: Radi danas
-- If working: Start time, End time
-- Buttons: Otkaži, Sačuvaj
-
-*Blocked Slots:*
-- List of all blocked time slots
-- Each shows: Date, Time range, Reason (if any), Delete button
-- "Dodaj blokirani termin" button → opens dialog
-
-*Dialog: Novi blokirani termin*
-- Datum (required)
-- Vreme od (required)
-- Vreme do (required)
-- Razlog (optional)
-- Buttons: Otkaži, Dodaj
-
-**Tab 3: Brendiranje (Branding)**
-
-*Color Themes:*
-- 6 preset themes: Zlatna, Roze, Ljubičasta, Plava, Zelena, Crvena
-- Each theme has Light/Dark variant
-- Radio button selection
-
-*Preview:*
-- Live preview of booking page
-- Shows up to 3 services from database
-- Updates with theme selection
-
-*Save:*
-- "Sačuvaj izmene" button
-
----
-
-### Phase 3: Public Booking System
-
-**Location:** `/book/[slug]`
-**Access:** Public (no authentication required)
-
-| Step | Feature | Description |
-|------|---------|-------------|
-| 1 | Salon Page | View salon info, logo, banner |
-| 2 | Service Selection | Choose from active services |
-| 3 | Date Selection | Pick available date (next 14 days) |
-| 4 | Time Selection | Pick available time slot |
-| 5 | Contact Info | Enter phone (required), name (optional) |
-| 6 | Confirmation | View booking details |
-
-**Availability Rules:**
-- Respects working hours
-- Respects blocked slots
-- Respects existing bookings
-- Accounts for service duration
-- Prevents double-booking
+| Feature | Phase |
+|---------|-------|
+| Admin expansion (analytics, CRM, finances, promotions, audit) | 5 |
+| Demo system (demo login, cron reset, is_demo flags) | 6 |
+| 3-environment setup (lokal/staging/production) | 7 |
 
 ---
 
 ## Test Scenarios
 
 ### Authentication
-- [ ] Salon owner can log in with valid credentials
-- [ ] Invalid credentials show error message
-- [ ] Logout redirects to login page
-- [ ] Session expires correctly
+- [ ] Login with valid credentials
+- [ ] Invalid credentials show error
+- [ ] Admin redirects to `/admin`
+- [ ] Client redirects to `/dashboard`
+- [ ] Demo login (admin) works from landing page
+- [ ] Demo login (salon) works from landing page
+- [ ] Logout redirects to login
 - [ ] Protected routes redirect to login
+- [ ] Role-based access (admin can't access dashboard, client can't access admin)
+
+### Demo System
+- [ ] Demo buttons visible on landing page
+- [ ] Demo admin login sets session and redirects to `/admin`
+- [ ] Demo salon login sets session and redirects to `/dashboard`
+- [ ] Demo users have `is_demo=true` flag
+- [ ] Non-demo users can't use demo login endpoint
+- [ ] Cron job resets demo data daily at 3 AM
+
+### Admin - Salon Management
+- [ ] Salon list loads with all salons
+- [ ] Search by name works
+- [ ] "+Novi Salon" opens dialog (not page navigation)
+- [ ] Dialog: name auto-generates subdomain (Serbian char mapping)
+- [ ] Dialog: all fields validate
+- [ ] Dialog: create salon works, refreshes list
+- [ ] Brze akcije dropdown: Pregled navigates to salon detail
+- [ ] Brze akcije dropdown: CRM navigates to salon detail with CRM tab
+- [ ] Brze akcije dropdown: Evidentiraj uplatu opens popup
+- [ ] Brze akcije dropdown: Obriši opens confirmation
+- [ ] Activate/deactivate toggle works
+- [ ] Empty state shows when no salons
+
+### Admin - Salon Detail
+- [ ] Tab navigation works (pregled, crm, uplate, statistika, podesavanja)
+- [ ] URL query param `?tab=crm` opens CRM tab directly
+- [ ] Pregled shows salon info
+- [ ] CRM shows contacts list
+- [ ] Uplate shows payment history
+- [ ] Statistika shows salon stats
+- [ ] Podešavanja allows editing
 
 ### Dashboard Overview
 - [ ] Stats cards show correct numbers
@@ -353,52 +220,38 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 - [ ] Upcoming bookings list shows correct data
 - [ ] "Svi termini" navigates to kalendar
 
-### Booking Popup (Dashboard)
-- [ ] Service dropdown shows active services only
-- [ ] Phone field is required
-- [ ] Name field is optional
-- [ ] Date defaults to today
-- [ ] Service summary shows duration and price
-- [ ] Submit creates booking
-- [ ] Cancel closes popup without saving
-- [ ] Edit mode pre-fills all fields
-- [ ] Edit mode updates booking on save
-
-### Calendar
+### Calendar & Bookings
 - [ ] Weekly view shows correct dates
 - [ ] Navigation changes week
 - [ ] "Danas" returns to current week
 - [ ] Bookings appear on correct days
 - [ ] Today is highlighted
-- [ ] Status badges show correct colors
+- [ ] Status badges show correct colors (including noshow)
 - [ ] Today's bookings section shows correct data
+- [ ] Create booking popup works
+- [ ] Edit booking popup pre-fills data
+- [ ] Potvrdi changes status to confirmed
+- [ ] Završi changes status to completed
+- [ ] Otkaži opens confirmation, changes to cancelled
+- [ ] Noshow status displayed correctly
 
-### Booking Actions
-- [ ] "Potvrdi" changes status to confirmed
-- [ ] "Završi" changes status to completed
-- [ ] "Otkaži" opens confirmation dialog
-- [ ] Confirmation dialog has Odustani/Potvrdi
-- [ ] Cancel changes status to cancelled
-- [ ] Edit button opens popup with data
-- [ ] Edit saves changes correctly
-
-### Evidencija (List View)
-- [ ] Table shows all bookings
-- [ ] Status filter works
-- [ ] Date filter works
-- [ ] "Poništi" clears filters
-- [ ] Actions work same as calendar view
+### Booking Status Colors
+| Status | Serbian | Color |
+|--------|---------|-------|
+| pending | Na čekanju | Warning (gold) |
+| confirmed | Potvrđeno | Success (teal) |
+| completed | Završeno | Success (teal) |
+| cancelled | Otkazano | Destructive (red) |
+| noshow | Nije došao/la | Muted (grey) |
 
 ### Services
 - [ ] Table shows all services
 - [ ] "Nova usluga" opens popup
 - [ ] Create service works
-- [ ] Edit button opens popup with data
 - [ ] Edit saves changes
-- [ ] Delete opens confirmation dialog
-- [ ] Delete removes service
-- [ ] Status toggle works
-- [ ] Inactive services hidden from booking
+- [ ] Delete opens confirmation
+- [ ] Status toggle works (Aktivna/Neaktivna)
+- [ ] Inactive services hidden from public booking
 
 ### Clients
 - [ ] Stats cards show correct totals
@@ -406,103 +259,139 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 - [ ] Search by phone works
 - [ ] "Novi klijent" opens popup
 - [ ] Create client works
-- [ ] Edit button opens popup with data
-- [ ] Edit saves changes
+- [ ] Edit saves changes (including notes)
 - [ ] "Detalji" opens history dialog
-- [ ] History shows all bookings
+- [ ] Customer notes field works
+- [ ] Notification channel displayed
 
-### Settings - Opšte
-- [ ] Form shows current values
-- [ ] Save updates salon info
-- [ ] Changes reflect on booking page
+### Finances
+- [ ] Revenue chart displays correctly
+- [ ] Income categories: booking, products, tips, other
+- [ ] Expense categories: supplies, rent, utilities, salaries, marketing, other
+- [ ] Source indicator: auto (Dragica) vs manual
+- [ ] Period filters work (dan, nedelja, mesec)
+- [ ] Add manual income entry works
+- [ ] Add expense entry works
+- [ ] Total amounts calculate correctly
 
-### Settings - Radno vreme
-- [ ] All 7 days displayed
-- [ ] Edit day opens dialog
-- [ ] Toggle working day works
-- [ ] Time inputs work
-- [ ] Save updates working hours
-- [ ] Blocked slots list shows all
-- [ ] Add blocked slot works
-- [ ] Delete blocked slot works
-
-### Settings - Brendiranje
-- [ ] Theme presets display
-- [ ] Light/Dark variants work
-- [ ] Preview updates live
-- [ ] Save persists theme
-- [ ] Booking page reflects theme
+### Settings
+- [ ] Opšte: save updates salon info
+- [ ] Radno vreme: all 7 days displayed, edit dialog works
+- [ ] Blokirani slotovi: add/delete works
+- [ ] Brendiranje: 6 themes, light/dark, preview updates live
 
 ### Public Booking
 - [ ] Valid slug loads salon
 - [ ] Invalid slug shows error
 - [ ] Inactive salon shows message
-- [ ] Active services displayed
-- [ ] Date picker shows 14 days
+- [ ] Custom branding applied
+- [ ] Service selection works
+- [ ] Date picker shows available dates
 - [ ] Time slots respect working hours
 - [ ] Time slots respect blocked slots
-- [ ] Time slots respect bookings
+- [ ] Time slots respect existing bookings
 - [ ] Phone required for submit
 - [ ] Booking creates successfully
 - [ ] Confirmation page shows details
-- [ ] Double-booking prevented
+- [ ] Manage booking via token works
 
 ---
 
 ## API Endpoints
 
-### Authentication
+### Auth (4 endpoints)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/auth/signin` | User login |
-| POST | `/api/auth/signout` | User logout |
+| GET | `/api/auth/callback` | OAuth callback |
+| POST | `/api/auth/signout` | Logout |
+| POST | `/api/auth/role` | Get user role (server-side, bypasses RLS) |
+| POST | `/api/auth/demo-login` | Demo login |
 
-### Dashboard APIs
+### Cron (1 endpoint)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/cron/reset-demo` | Daily demo data reset |
+
+### Admin APIs (30+ endpoints)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/stats` | Platform statistics |
+| GET | `/api/admin/analytics` | Analytics data |
+| GET | `/api/admin/audit` | Audit log |
+| GET | `/api/admin/export` | Export data |
+| GET/POST | `/api/admin/finances` | Platform finances |
+| PUT/DELETE | `/api/admin/finances/[id]` | Manage finance entry |
+| GET/POST | `/api/admin/salons` | Salon CRUD |
+| POST | `/api/admin/salons/import` | Bulk import |
+| GET/PUT/DELETE | `/api/admin/salons/[id]` | Salon detail |
+| GET | `/api/admin/salons/[id]/stats` | Salon statistics |
+| GET/POST | `/api/admin/salons/[id]/services` | Salon services |
+| PUT/DELETE | `/api/admin/salons/[id]/services/[serviceId]` | Service detail |
+| GET/POST | `/api/admin/salons/[id]/hours` | Working hours |
+| PUT/DELETE | `/api/admin/salons/[id]/hours/[hourId]` | Hour detail |
+| GET/POST | `/api/admin/salons/[id]/blocked-slots` | Blocked slots |
+| DELETE | `/api/admin/salons/[id]/blocked-slots/[slotId]` | Delete slot |
+| GET/POST | `/api/admin/salons/[id]/contacts` | CRM contacts |
+| PUT/DELETE | `/api/admin/salons/[id]/contacts/[contactId]` | Contact detail |
+| GET/POST | `/api/admin/salons/[id]/payments` | Payments |
+| GET/PUT | `/api/admin/salons/[id]/tags` | Salon tags |
+| GET/POST | `/api/admin/subscriptions` | Subscriptions |
+| GET/POST | `/api/admin/plans` | Subscription plans |
+| PUT/DELETE | `/api/admin/plans/[id]` | Plan detail |
+| GET/POST | `/api/admin/payments` | Platform payments |
+| PUT | `/api/admin/payments/[id]` | Payment detail |
+| GET/POST | `/api/admin/coupons` | Coupon management |
+| PUT/DELETE | `/api/admin/coupons/[id]` | Coupon detail |
+| GET/POST | `/api/admin/reminders` | Reminder templates |
+| PUT/DELETE | `/api/admin/reminders/[id]` | Reminder detail |
+| GET/POST | `/api/admin/tags` | Tags |
+| GET | `/api/admin/check` | Auth check |
+| POST | `/api/admin/impersonate` | Impersonate salon |
+| PUT | `/api/admin/settings/password` | Change password |
+| PUT | `/api/admin/settings/account` | Update account |
+| GET/PUT | `/api/admin/settings/app` | App settings |
+
+### Dashboard APIs (14 endpoints)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/dashboard/stats` | Dashboard statistics |
-| GET | `/api/dashboard/salon` | Get salon details |
-| PUT | `/api/dashboard/salon` | Update salon details |
-| PUT | `/api/dashboard/branding` | Update branding |
-| POST | `/api/dashboard/upload` | Upload logo/banner |
-| GET | `/api/dashboard/services` | List services |
-| POST | `/api/dashboard/services` | Create service |
-| PUT | `/api/dashboard/services/[id]` | Update service |
-| DELETE | `/api/dashboard/services/[id]` | Delete service |
-| GET | `/api/dashboard/clients` | List clients |
-| POST | `/api/dashboard/clients` | Create client |
-| PUT | `/api/dashboard/clients/[id]` | Update client |
-| GET | `/api/dashboard/clients/[id]` | Get client details |
-| GET | `/api/dashboard/bookings` | List bookings |
-| POST | `/api/dashboard/bookings` | Create booking |
-| PUT | `/api/dashboard/bookings/[id]` | Update booking (status, service, customer, datetime) |
-| DELETE | `/api/dashboard/bookings/[id]` | Cancel booking |
-| GET | `/api/dashboard/working-hours` | Get working hours |
-| POST | `/api/dashboard/working-hours` | Create working hour |
-| PUT | `/api/dashboard/working-hours/[id]` | Update working hour |
-| GET | `/api/dashboard/blocked-slots` | List blocked slots |
-| POST | `/api/dashboard/blocked-slots` | Create blocked slot |
-| DELETE | `/api/dashboard/blocked-slots/[id]` | Delete blocked slot |
-| GET | `/api/dashboard/finances` | Financial data |
+| GET/PUT | `/api/dashboard/salon` | Salon details |
+| PUT | `/api/dashboard/branding` | Branding settings |
+| POST | `/api/dashboard/upload` | File upload |
+| GET/POST | `/api/dashboard/services` | Services |
+| PUT/DELETE | `/api/dashboard/services/[id]` | Service detail |
+| GET/POST | `/api/dashboard/clients` | Clients |
+| GET/PUT | `/api/dashboard/clients/[id]` | Client detail |
+| GET/POST | `/api/dashboard/bookings` | Bookings |
+| PUT/DELETE | `/api/dashboard/bookings/[id]` | Booking detail |
+| GET/PUT | `/api/dashboard/working-hours` | Working hours |
+| PUT/DELETE | `/api/dashboard/working-hours/[id]` | Hour detail |
+| GET/POST | `/api/dashboard/blocked-slots` | Blocked slots |
+| DELETE | `/api/dashboard/blocked-slots/[id]` | Delete slot |
+| GET/POST | `/api/dashboard/finances` | Financial entries |
+| PUT/DELETE | `/api/dashboard/finances/[id]` | Finance detail |
 
-### Public APIs
+### Public APIs (5 endpoints)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/public/[slug]` | Salon info + services |
 | GET | `/api/public/[slug]/availability` | Available time slots |
+| POST | `/api/public/[slug]/send-otp` | Send OTP |
 | POST | `/api/public/[slug]/book` | Create booking |
-| GET | `/api/public/[slug]/booking/[id]` | Get booking details |
+| GET | `/api/public/[slug]/booking/[id]` | Booking details |
+| GET/PUT | `/api/public/[slug]/manage/[token]` | Manage booking |
 
 ---
 
 ## Database Schema
 
-### tenants (Salons)
+### tenants
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | Primary key |
 | name | TEXT | Salon name |
 | slug | TEXT | URL slug (unique) |
+| subdomain | TEXT | Subdomain (unique) |
 | email | TEXT | Contact email |
 | phone | TEXT | Contact phone |
 | address | TEXT | Address |
@@ -512,16 +401,21 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 | accent_color | TEXT | Theme accent color |
 | background_color | TEXT | Theme background |
 | text_color | TEXT | Theme text color |
+| button_style | TEXT | Button style |
+| welcome_message | TEXT | Welcome message |
 | is_active | BOOLEAN | Active status |
+| is_demo | BOOLEAN | Demo flag |
 | created_at | TIMESTAMP | Creation date |
 
 ### users
 | Column | Type | Description |
 |--------|------|-------------|
-| id | UUID | Primary key |
+| id | UUID | Primary key (FK to auth.users) |
 | email | TEXT | User email |
+| full_name | TEXT | Display name |
 | role | TEXT | 'admin' or 'client' |
 | tenant_id | UUID | FK to tenants |
+| is_demo | BOOLEAN | Demo flag |
 | created_at | TIMESTAMP | Creation date |
 
 ### services
@@ -533,7 +427,6 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 | duration_minutes | INTEGER | Duration |
 | price | DECIMAL | Price in RSD |
 | is_active | BOOLEAN | Active status |
-| created_at | TIMESTAMP | Creation date |
 
 ### customers
 | Column | Type | Description |
@@ -542,7 +435,8 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 | tenant_id | UUID | FK to tenants |
 | phone | TEXT | Phone number |
 | name | TEXT | Customer name |
-| created_at | TIMESTAMP | Creation date |
+| notes | TEXT | Customer notes |
+| notification_channel | TEXT | Preferred channel (sms/whatsapp/viber) |
 
 ### bookings
 | Column | Type | Description |
@@ -553,29 +447,8 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 | customer_id | UUID | FK to customers |
 | start_datetime | TIMESTAMP | Start time |
 | end_datetime | TIMESTAMP | End time |
-| status | TEXT | pending/confirmed/completed/cancelled |
-| created_at | TIMESTAMP | Creation date |
-
-### working_hours
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| tenant_id | UUID | FK to tenants |
-| day_of_week | INTEGER | 0-6 (Mon-Sun) |
-| start_time | TIME | Opening time |
-| end_time | TIME | Closing time |
-| is_working | BOOLEAN | Working day |
-
-### blocked_slots
-| Column | Type | Description |
-|--------|------|-------------|
-| id | UUID | Primary key |
-| tenant_id | UUID | FK to tenants |
-| date | DATE | Block date |
-| start_time | TIME | Start time |
-| end_time | TIME | End time |
-| reason | TEXT | Optional reason |
-| created_at | TIMESTAMP | Creation date |
+| status | TEXT | pending/confirmed/completed/cancelled/noshow |
+| manage_token | TEXT | Token for public management |
 
 ### financial_entries
 | Column | Type | Description |
@@ -583,65 +456,66 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 | id | UUID | Primary key |
 | tenant_id | UUID | FK to tenants |
 | type | TEXT | income/expense |
-| category | TEXT | Category |
-| amount | DECIMAL | Amount |
+| category | TEXT | booking/products/tips/other (income), supplies/rent/utilities/salaries/marketing/other (expense) |
+| amount | DECIMAL | Amount in RSD |
 | description | TEXT | Description |
 | entry_date | DATE | Entry date |
-| booking_id | UUID | FK to bookings |
-| created_at | TIMESTAMP | Creation date |
+| booking_id | UUID | FK to bookings (auto entries) |
+
+### Additional Tables
+- `subscription_plans` - Plan definitions (name, price, features)
+- `subscriptions` - Active subscriptions (tenant, plan, status, dates)
+- `payments` - Payment records
+- `coupons` - Promotional coupons (code, discount, validity)
+- `platform_settings` - Global app settings
+
+---
+
+## Demo System
+
+### How It Works
+1. Landing page has two demo buttons: "Demo Admin" and "Demo Salon"
+2. Buttons call `POST /api/auth/demo-login` with `type: 'admin'|'owner'`
+3. API reads credentials from env vars (`DEMO_ADMIN_EMAIL`, etc.)
+4. Verifies user has `is_demo=true` in database
+5. Signs in via Supabase Auth, sets session cookies
+6. Redirects to `/admin` or `/dashboard`
+
+### Daily Reset
+- Vercel cron job runs at 3 AM: `GET /api/cron/reset-demo`
+- Protected by `CRON_SECRET` env var
+- Resets demo salon data to known state
+
+### Env Variables (Preview/Staging)
+```
+DEMO_ADMIN_EMAIL=demo-admin@dragica.local
+DEMO_ADMIN_PASSWORD=demo1234
+DEMO_OWNER_EMAIL=demo-salon@dragica.local
+DEMO_OWNER_PASSWORD=demo1234
+CRON_SECRET=staging-cron-secret-dragica
+```
 
 ---
 
 ## Mobile Responsive Testing
 
-### Screen Sizes to Test
+### Screen Sizes
 | Device | Width |
 |--------|-------|
 | iPhone SE | 375px |
 | iPhone 12/13 | 390px |
-| iPhone 12/13 Pro Max | 428px |
 | Samsung Galaxy S21 | 360px |
 | iPad Mini | 768px |
 | iPad Pro | 1024px |
 
-### Mobile Navigation
-- [ ] Menu button on LEFT side of header
-- [ ] Menu button opens Sheet (slide from left)
-- [ ] Sheet shows full sidebar content
-- [ ] Clicking nav item CLOSES menu
-- [ ] Logo "Dragica" + slogan in header
-- [ ] Header height: 72px
-
-### Mobile Dashboard
+### Checklist
+- [ ] Mobile navigation (hamburger menu, slide-out sheet)
 - [ ] Stats cards stack vertically
-- [ ] Quick actions full width
-- [ ] Upcoming bookings scrollable
-- [ ] All text readable (min 14px)
-
-### Mobile Calendar
-- [ ] Weekly view horizontally scrollable
-- [ ] Day columns readable
-- [ ] Booking cards fit content
-- [ ] Tab switching works
-
-### Mobile Tables (Evidencija, Usluge, Klijenti)
 - [ ] Tables horizontally scrollable
-- [ ] Column headers visible
-- [ ] Action buttons accessible
-- [ ] Row height comfortable for touch
-
-### Mobile Popup Forms
-- [ ] Dialogs full width on small screens
+- [ ] Popup dialogs full width on small screens
 - [ ] Input fields min 16px font (prevent zoom)
-- [ ] Buttons min 44px height (touch target)
-- [ ] Keyboard doesn't obscure inputs
-- [ ] Select dropdowns work properly
-
-### Mobile Settings
-- [ ] Tabs horizontally scrollable
-- [ ] Forms full width
-- [ ] Working hours grid readable
-- [ ] Theme preview fits screen
+- [ ] Touch targets min 44px
+- [ ] Calendar view readable on mobile
 
 ---
 
@@ -650,8 +524,7 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 - All UI text: Serbian (Latin script)
 - Date format: `d. MMM yyyy` (e.g., "4. feb 2026")
 - Time format: 24-hour `HH:mm` (e.g., "14:30")
-- Day names: Serbian Latin (pon, uto, sre, čet, pet, sub, ned)
-- Month names: Serbian Latin (jan, feb, mar, apr, maj, jun, jul, avg, sep, okt, nov, dec)
+- Day names: Serbian Latin (pon, uto, sre, cet, pet, sub, ned)
 - Currency: RSD (Serbian Dinar)
 - Locale library: `date-fns/locale/sr-Latn`
 
@@ -659,29 +532,15 @@ Dragica is a multi-tenant SaaS application designed for nail salons to manage th
 
 ## Known Limitations
 
-1. **No SMS/Email:** Notifications not yet implemented
+1. **No Notifications:** SMS/WhatsApp/Viber not yet active (Infobip integrated but not configured)
 2. **Single Staff:** Each salon has one staff member only
-3. **No Payments:** Online payment not available
+3. **No Online Payments:** Payment processing not available
 4. **No Mobile App:** Web only (responsive)
 5. **Serbian Only:** No multi-language support
+6. **No Automated Tests:** Testing plan exists but not implemented
 
 ---
 
-## Planned Features
-
-| Feature | Priority |
-|---------|----------|
-| SMS notifications | High |
-| Email notifications | High |
-| Multi-staff support | High |
-| Online payments | Medium |
-| Analytics dashboard | Medium |
-| Client loyalty program | Low |
-| Mobile app | Low |
-| Multi-language | Low |
-
----
-
-**Document Version:** 2.0
+**Document Version:** 3.0
 **Updated by:** Claude Code
-**Date:** February 4, 2026
+**Date:** February 7, 2026

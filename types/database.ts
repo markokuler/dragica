@@ -204,6 +204,7 @@ export interface Database {
           id: string
           tenant_id: string
           phone: string
+          phone_normalized: string | null
           name: string | null
           notes: string | null
           notification_channel: 'whatsapp' | 'viber' | null
@@ -214,6 +215,7 @@ export interface Database {
           id?: string
           tenant_id: string
           phone: string
+          phone_normalized?: string | null
           name?: string | null
           notes?: string | null
           notification_channel?: 'whatsapp' | 'viber' | null
@@ -224,6 +226,7 @@ export interface Database {
           id?: string
           tenant_id?: string
           phone?: string
+          phone_normalized?: string | null
           name?: string | null
           notes?: string | null
           notification_channel?: 'whatsapp' | 'viber' | null

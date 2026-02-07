@@ -182,6 +182,18 @@ export function isSamePhone(phone1: string, phone2: string): boolean {
 }
 
 /**
+ * Normalizes a phone number for DB lookup (mirrors normalize_phone() trigger).
+ * Strips non-digits, removes leading "00".
+ */
+export function normalizePhoneForDB(phone: string): string {
+  let digits = phone.replace(/\D/g, '')
+  if (digits.startsWith('00')) {
+    digits = digits.slice(2)
+  }
+  return digits
+}
+
+/**
  * Formats phone for display
  */
 export function formatPhoneDisplay(phone: string): string {

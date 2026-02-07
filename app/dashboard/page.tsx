@@ -20,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Calendar, DollarSign, Users, Plus, ArrowRight } from 'lucide-react'
+import { Calendar, DollarSign, Users, Plus, ArrowRight, ChevronDown, Search } from 'lucide-react'
+import { COUNTRY_CODES, formatInternationalPhone, parseInternationalPhone } from '@/lib/phone-utils'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
@@ -72,6 +73,17 @@ export default function DashboardPage() {
     time: '',
   })
 
+  const [countryCode, setCountryCode] = useState('381')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+
+  // Client search state
+  const [clientSearch, setClientSearch] = useState('')
+  const [clientResults, setClientResults] = useState<Array<{ id: string; name: string | null; phone: string }>>([])
+  const [showClientResults, setShowClientResults] = useState(false)
+  const [searchingClients, setSearchingClients] = useState(false)
+  const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null)
+
   // Service dialog state
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false)
   const [serviceForm, setServiceForm] = useState({
@@ -118,6 +130,52 @@ export default function DashboardPage() {
     }
   }
 
+  const handleClientSearch = (term: string) => {
+    setClientSearch(term)
+    if (searchTimeout) clearTimeout(searchTimeout)
+
+    if (term.length < 2) {
+      setClientResults([])
+      setShowClientResults(false)
+      return
+    }
+
+    setSearchingClients(true)
+    const timeout = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/dashboard/clients?search=${encodeURIComponent(term)}&limit=5`)
+        if (response.ok) {
+          const data = await response.json()
+          setClientResults((data.clients || []).map((c: { id: string; name: string | null; phone: string }) => ({
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+          })))
+          setShowClientResults(true)
+        }
+      } catch (error) {
+        console.error('Error searching clients:', error)
+      } finally {
+        setSearchingClients(false)
+      }
+    }, 300)
+    setSearchTimeout(timeout)
+  }
+
+  const selectClient = (client: { id: string; name: string | null; phone: string }) => {
+    const parsed = parseInternationalPhone(client.phone)
+    if (parsed) {
+      setCountryCode(parsed.countryCode)
+      setPhoneNumber(parsed.localNumber)
+    } else {
+      setPhoneNumber(client.phone)
+    }
+    setBookingForm((prev) => ({ ...prev, customer_name: client.name || '' }))
+    setClientSearch('')
+    setClientResults([])
+    setShowClientResults(false)
+  }
+
   const openBookingDialog = () => {
     setBookingForm({
       service_id: '',
@@ -126,6 +184,12 @@ export default function DashboardPage() {
       date: format(new Date(), 'yyyy-MM-dd'),
       time: '',
     })
+    setCountryCode('381')
+    setPhoneNumber('')
+    setShowCountryDropdown(false)
+    setClientSearch('')
+    setClientResults([])
+    setShowClientResults(false)
     setBookingDialogOpen(true)
   }
 
@@ -135,13 +199,14 @@ export default function DashboardPage() {
 
     try {
       const start_datetime = `${bookingForm.date}T${bookingForm.time}:00`
+      const combinedPhone = formatInternationalPhone(countryCode, phoneNumber)
 
       const response = await fetch('/api/dashboard/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           service_id: bookingForm.service_id,
-          customer_phone: bookingForm.customer_phone,
+          customer_phone: combinedPhone,
           customer_name: bookingForm.customer_name || null,
           start_datetime,
         }),
@@ -381,15 +446,95 @@ export default function DashboardPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Telefon klijenta *</Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+381 60 123 4567"
-                  value={bookingForm.customer_phone}
-                  onChange={(e) => setBookingForm({ ...bookingForm, customer_phone: e.target.value })}
-                  required
-                />
+                <Label>Pretraga klijenta</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Pretražite po imenu ili telefonu"
+                    value={clientSearch}
+                    onChange={(e) => handleClientSearch(e.target.value)}
+                    onFocus={() => clientResults.length > 0 && setShowClientResults(true)}
+                    className="pl-9"
+                  />
+                  {showClientResults && clientResults.length > 0 && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowClientResults(false)} />
+                      <div className="absolute top-full left-0 right-0 mt-1 max-h-60 overflow-auto rounded-md border border-input bg-background shadow-md z-50">
+                        {clientResults.map((client) => (
+                          <button
+                            key={client.id}
+                            type="button"
+                            onClick={() => selectClient(client)}
+                            className="w-full px-3 py-2 text-left hover:bg-secondary/50 border-b border-border last:border-b-0"
+                          >
+                            <p className="font-medium text-sm">{client.name || 'Bez imena'}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{client.phone}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {showClientResults && clientResults.length === 0 && clientSearch.length >= 2 && !searchingClients && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowClientResults(false)} />
+                      <div className="absolute top-full left-0 right-0 mt-1 rounded-md border border-input bg-background shadow-md z-50 p-3">
+                        <p className="text-sm text-muted-foreground text-center">Nema rezultata</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Unesite 2+ karaktera za pretragu postojećih klijenata</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Telefon klijenta *</Label>
+                <div className="flex gap-2">
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                      className="h-10 px-3 flex items-center gap-1 rounded-md border border-input bg-background text-sm min-w-[90px] justify-between hover:bg-secondary/50"
+                    >
+                      <span>
+                        {COUNTRY_CODES.find(c => c.code === countryCode)?.flag} +{countryCode}
+                      </span>
+                      <ChevronDown className="w-4 h-4 opacity-60" />
+                    </button>
+                    {showCountryDropdown && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowCountryDropdown(false)} />
+                        <div className="absolute top-full left-0 mt-1 w-56 max-h-60 overflow-auto rounded-md border border-input bg-background shadow-md z-50">
+                          {COUNTRY_CODES.map((c) => (
+                            <button
+                              key={c.code}
+                              type="button"
+                              onClick={() => {
+                                setCountryCode(c.code)
+                                setShowCountryDropdown(false)
+                              }}
+                              className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-secondary/50 ${
+                                countryCode === c.code ? 'bg-secondary' : ''
+                              }`}
+                            >
+                              <span>{c.flag}</span>
+                              <span className="font-medium">+{c.code}</span>
+                              <span className="text-muted-foreground">{c.country}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <Input
+                    type="tel"
+                    placeholder="60 123 4567"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    required
+                    className="flex-1"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">Sa ili bez početne nule (060... ili 60...)</p>
               </div>
 
               <div className="space-y-2">

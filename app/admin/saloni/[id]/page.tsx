@@ -52,7 +52,6 @@ import {
   BarChart3,
   ExternalLink,
   UserCog,
-  Save,
   Plus,
   TrendingUp,
   TrendingDown,
@@ -116,12 +115,16 @@ interface Stats {
     total: number
     thisMonth: number
     lastMonth: number
+    cancelled: number
+    noShow: number
+    onlineThisMonth: number
+    manualThisMonth: number
     lastActivityDate: string | null
   }
   clients: { total: number }
   services: { total: number; active: number }
   engagement: { onlineBookingRate: number; completionRate: number }
-  activity: { ownerCreatedAt: string | null; workingDays: number }
+  activity: { ownerCreatedAt: string | null; workingDays: number; blockedSlots: number }
 }
 
 interface SalonTag {
@@ -152,6 +155,38 @@ interface Reminder {
   reminder_date: string
   is_completed: boolean
   tenant_id: string | null
+}
+
+interface AdminNote {
+  id: string
+  text: string
+  level: 'info' | 'important' | 'critical'
+  created_at: string
+}
+
+const NOTE_LEVELS = [
+  { value: 'info' as const, label: 'Info', bg: 'bg-emerald-500', text: 'text-white [text-shadow:_0_1px_2px_rgba(0,0,0,0.6)]', border: 'border-emerald-700' },
+  { value: 'important' as const, label: 'Važno', bg: 'bg-yellow-400', text: 'text-white [text-shadow:_-1px_-1px_0_rgba(0,0,0,0.8),_1px_-1px_0_rgba(0,0,0,0.8),_-1px_1px_0_rgba(0,0,0,0.8),_1px_1px_0_rgba(0,0,0,0.8)]', border: 'border-yellow-600' },
+  { value: 'critical' as const, label: 'Kritično', bg: 'bg-red-500', text: 'text-white [text-shadow:_-1px_-1px_0_rgba(0,0,0,0.8),_1px_-1px_0_rgba(0,0,0,0.8),_-1px_1px_0_rgba(0,0,0,0.8),_1px_1px_0_rgba(0,0,0,0.8)]', border: 'border-red-700' },
+]
+
+function parseAdminNotes(raw: string | null): AdminNote[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed
+  } catch {
+    // Plain text from old format — convert to single note
+    if (raw.trim()) {
+      return [{
+        id: crypto.randomUUID(),
+        text: raw.trim(),
+        level: 'info',
+        created_at: new Date().toISOString(),
+      }]
+    }
+  }
+  return []
 }
 
 const CONTACT_TYPES = [
@@ -186,10 +221,12 @@ export default function SalonBusinessPage() {
   const [contacts, setContacts] = useState<Contact[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])
 
-  // Notes form
-  const [adminNotes, setAdminNotes] = useState('')
+  // Notes
+  const [adminNotesList, setAdminNotesList] = useState<AdminNote[]>([])
   const [savingNotes, setSavingNotes] = useState(false)
-  const [notesMessage, setNotesMessage] = useState('')
+  const [showNoteForm, setShowNoteForm] = useState(false)
+  const [newNoteText, setNewNoteText] = useState('')
+  const [newNoteLevel, setNewNoteLevel] = useState<AdminNote['level']>('info')
 
   // Payment dialog
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
@@ -239,7 +276,7 @@ export default function SalonBusinessPage() {
       if (response.ok) {
         const data = await response.json()
         setSalon(data.salon)
-        setAdminNotes(data.salon.admin_notes || '')
+        setAdminNotesList(parseAdminNotes(data.salon.admin_notes))
       } else {
         router.push('/admin/saloni')
       }
@@ -335,27 +372,45 @@ export default function SalonBusinessPage() {
     }
   }
 
-  // Notes
-  const handleSaveNotes = async () => {
+  // Notes — persist to admin_notes as JSON
+  const saveNotesList = async (notes: AdminNote[]) => {
     setSavingNotes(true)
-    setNotesMessage('')
     try {
       const response = await fetch(`/api/admin/salons/${salonId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ admin_notes: adminNotes }),
+        body: JSON.stringify({ admin_notes: JSON.stringify(notes) }),
       })
       if (response.ok) {
-        setNotesMessage('Sačuvano')
-        setTimeout(() => setNotesMessage(''), 3000)
+        setAdminNotesList(notes)
       } else {
-        setNotesMessage('Greška')
+        alert('Greška pri čuvanju beleške')
       }
     } catch {
-      setNotesMessage('Greška pri čuvanju')
+      alert('Greška pri čuvanju')
     } finally {
       setSavingNotes(false)
     }
+  }
+
+  const handleAddNote = () => {
+    if (!newNoteText.trim()) return
+    const note: AdminNote = {
+      id: crypto.randomUUID(),
+      text: newNoteText.trim(),
+      level: newNoteLevel,
+      created_at: new Date().toISOString(),
+    }
+    const updated = [note, ...adminNotesList]
+    saveNotesList(updated)
+    setNewNoteText('')
+    setNewNoteLevel('info')
+    setShowNoteForm(false)
+  }
+
+  const handleDeleteNote = (noteId: string) => {
+    const updated = adminNotesList.filter(n => n.id !== noteId)
+    saveNotesList(updated)
   }
 
   // Status toggle
@@ -583,6 +638,36 @@ export default function SalonBusinessPage() {
   }
 
   const bookingTrend = getBookingTrend()
+
+  const getCancellationRate = () => {
+    if (!stats || stats.bookings.total === 0) return 0
+    return Math.round((stats.bookings.cancelled / stats.bookings.total) * 100)
+  }
+
+  const getNoShowRate = () => {
+    if (!stats || stats.bookings.total === 0) return 0
+    return Math.round((stats.bookings.noShow / stats.bookings.total) * 100)
+  }
+
+  const getDaysSinceActivity = () => {
+    if (!stats?.bookings.lastActivityDate) return null
+    const last = new Date(stats.bookings.lastActivityDate)
+    const now = new Date()
+    return Math.floor((now.getTime() - last.getTime()) / (1000 * 60 * 60 * 24))
+  }
+
+  const getProfileCompleteness = () => {
+    if (!salon || !stats) return { score: 0, items: [] as { label: string; done: boolean }[] }
+    const items = [
+      { label: 'Aktivne usluge', done: (stats.services.active || 0) > 0 },
+      { label: 'Radno vreme', done: (stats.activity.workingDays || 0) > 0 },
+      { label: 'Opis salona', done: !!salon.description },
+      { label: 'Logo', done: !!salon.logo_url },
+    ]
+    const score = Math.round((items.filter(i => i.done).length / items.length) * 100)
+    return { score, items }
+  }
+
   const unusedTags = availableTags.filter((at) => !tags.some((t) => t.tag_id === at.id))
 
   const getContactIcon = (type: string) => {
@@ -790,48 +875,132 @@ export default function SalonBusinessPage() {
               </CardContent>
             </Card>
 
-            {/* Activity */}
+            {/* Upcoming Reminders */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  Aktivnost
-                </CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bell className="h-4 w-4" />
+                    Podsećanja
+                  </CardTitle>
+                  <CardDescription>Predstojeća i aktivna</CardDescription>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setReminderDialogOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                </Button>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Poslednje zakazivanje:</span>
-                  <span className="text-sm">{stats?.bookings.lastActivityDate ? new Date(stats.bookings.lastActivityDate).toLocaleDateString('sr-RS') : 'Nema'}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Aktivnih usluga:</span>
-                  <span className="text-sm">{stats?.services.active || 0}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Radnih dana:</span>
-                  <span className="text-sm">{stats?.activity.workingDays || 0}</span>
-                </div>
+              <CardContent>
+                {(() => {
+                  const active = reminders.filter(r => !r.is_completed)
+                  if (active.length === 0) {
+                    return <p className="text-sm text-muted-foreground text-center py-3">Nema aktivnih podsećanja</p>
+                  }
+                  return (
+                    <div className="space-y-2">
+                      {active.slice(0, 3).map((reminder) => {
+                        const isOverdue = new Date(reminder.reminder_date) < new Date()
+                        return (
+                          <div key={reminder.id} className={`flex items-center gap-3 p-2 rounded-lg ${isOverdue ? 'bg-destructive/10' : 'bg-secondary/30'}`}>
+                            <button onClick={() => toggleReminder(reminder)}>
+                              <div className={`h-4 w-4 rounded-full border-2 ${isOverdue ? 'border-destructive' : 'border-muted-foreground'}`} />
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{reminder.title}</p>
+                              <p className={`text-xs ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>
+                                {new Date(reminder.reminder_date).toLocaleDateString('sr-RS')}
+                                {isOverdue && ' — zakasnelo'}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      {active.length > 3 && (
+                        <button onClick={() => setActiveTab('crm')} className="text-xs text-primary hover:underline w-full text-center pt-1">
+                          + još {active.length - 3} podsećanja
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
               </CardContent>
             </Card>
 
             {/* Notes */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-4 w-4" />
-                  Admin beleške
-                </CardTitle>
-                <CardDescription>Privatne beleške o salonu</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Textarea value={adminNotes} onChange={(e) => setAdminNotes(e.target.value)} placeholder="Dodaj beleške o salonu..." rows={4} />
-                <div className="flex items-center gap-4">
-                  <Button onClick={handleSaveNotes} disabled={savingNotes} size="sm">
-                    <Save className="h-4 w-4 mr-2" />
-                    {savingNotes ? 'Čuvanje...' : 'Sačuvaj'}
-                  </Button>
-                  {notesMessage && <span className={`text-sm ${notesMessage === 'Sačuvano' ? 'text-success' : 'text-destructive'}`}>{notesMessage}</span>}
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Admin beleške
+                  </CardTitle>
                 </div>
+                <Button size="sm" variant="outline" onClick={() => setShowNoteForm(!showNoteForm)}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {showNoteForm && (
+                  <div className="space-y-2 p-3 rounded-lg border border-border bg-secondary/10">
+                    <Textarea
+                      value={newNoteText}
+                      onChange={(e) => setNewNoteText(e.target.value)}
+                      placeholder="Unesite belešku..."
+                      rows={2}
+                      autoFocus
+                    />
+                    <div className="flex items-center gap-2">
+                      {NOTE_LEVELS.map((level) => (
+                        <button
+                          key={level.value}
+                          type="button"
+                          onClick={() => setNewNoteLevel(level.value)}
+                          className={`px-2.5 py-1.5 rounded-md text-xs font-semibold border-2 transition-all ${level.bg} ${level.text} ${level.border} ${newNoteLevel === level.value ? 'opacity-100' : 'opacity-50'}`}
+                        >
+                          {level.label}
+                        </button>
+                      ))}
+                      <div className="flex-1" />
+                      <Button size="sm" variant="ghost" onClick={() => { setShowNoteForm(false); setNewNoteText(''); setNewNoteLevel('info') }}>
+                        Otkaži
+                      </Button>
+                      <Button size="sm" onClick={handleAddNote} disabled={savingNotes || !newNoteText.trim()}>
+                        {savingNotes ? 'Čuvanje...' : 'Dodaj'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                {adminNotesList.length === 0 && !showNoteForm ? (
+                  <p className="text-sm text-muted-foreground text-center py-3">Nema beleški</p>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {adminNotesList.map((note) => {
+                      const levelConfig = NOTE_LEVELS.find(l => l.value === note.level) || NOTE_LEVELS[0]
+                      return (
+                        <div key={note.id} className="flex gap-2 p-2 rounded-lg bg-secondary/30 group">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className={`px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${levelConfig.bg} ${levelConfig.text} ${levelConfig.border}`}>
+                                {levelConfig.label}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(note.created_at).toLocaleDateString('sr-RS', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <p className="text-sm whitespace-pre-wrap">{note.text}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleDeleteNote(note.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1030,34 +1199,115 @@ export default function SalonBusinessPage() {
 
         {/* Statistics Tab */}
         <TabsContent value="statistika" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          {/* Churn risk banner */}
+          {(() => {
+            const days = getDaysSinceActivity()
+            if (days !== null && days > 14) {
+              return (
+                <div className={`p-3 rounded-lg flex items-center gap-3 ${days > 30 ? 'bg-destructive/10 border border-destructive/30' : 'bg-warning/10 border border-warning/30'}`}>
+                  <Activity className={`h-5 w-5 flex-shrink-0 ${days > 30 ? 'text-destructive' : 'text-warning'}`} />
+                  <div>
+                    <p className={`text-sm font-medium ${days > 30 ? 'text-destructive' : 'text-warning'}`}>
+                      {days > 30 ? 'Rizik od odliva' : 'Smanjena aktivnost'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Poslednje zakazivanje pre {days} dana — {days > 30 ? 'preporučljivo kontaktirati salon' : 'pratiti situaciju'}
+                    </p>
+                  </div>
+                </div>
+              )
+            }
+            return null
+          })()}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Aktivnost na platformi */}
             <Card>
-              <CardHeader><CardTitle className="text-sm">Zakazivanja</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Aktivnost na platformi
+                </CardTitle>
+                <CardDescription>Koliko salon koristi zakazivanja</CardDescription>
+              </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Ukupno:</span><span className="font-bold">{stats?.bookings.total || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Ovaj mesec:</span><span className="font-medium">{stats?.bookings.thisMonth || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Prošli mesec:</span><span className="text-muted-foreground">{stats?.bookings.lastMonth || 0}</span></div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Ukupno termina:</span>
+                  <span className="font-bold">{stats?.bookings.total || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Ovaj mesec:</span>
+                  <span className="font-medium">{stats?.bookings.thisMonth || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Prošli mesec:</span>
+                  <span className="text-muted-foreground">{stats?.bookings.lastMonth || 0}</span>
+                </div>
                 <div className="flex items-center gap-1 pt-2 border-t">
                   {bookingTrend.isUp ? <TrendingUp className="h-4 w-4 text-success" /> : <TrendingDown className="h-4 w-4 text-destructive" />}
                   <span className={`text-sm font-medium ${bookingTrend.isUp ? 'text-success' : 'text-destructive'}`}>
                     {bookingTrend.trend}% vs prošli mesec
                   </span>
                 </div>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-muted-foreground">Poslednja aktivnost:</span>
+                  <span className="text-sm">
+                    {stats?.bookings.lastActivityDate
+                      ? new Date(stats.bookings.lastActivityDate).toLocaleDateString('sr-RS')
+                      : 'Nema'}
+                    {(() => {
+                      const days = getDaysSinceActivity()
+                      if (days !== null) return ` (pre ${days}d)`
+                      return ''
+                    })()}
+                  </span>
+                </div>
               </CardContent>
             </Card>
 
+            {/* Online vs Ručno */}
             <Card>
-              <CardHeader><CardTitle className="text-sm">Korišćenje platforme</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  Online vs ručno zakazivanje
+                </CardTitle>
+                <CardDescription>Koliko klijenti sami zakazuju</CardDescription>
+              </CardHeader>
               <CardContent className="space-y-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-muted-foreground">Online zakazivanja:</span>
-                    <span className="font-medium">{stats?.engagement.onlineBookingRate || 0}%</span>
+                    <span className="text-sm text-muted-foreground">Online stopa (ukupno):</span>
+                    <span className="font-bold">{stats?.engagement.onlineBookingRate || 0}%</span>
                   </div>
                   <div className="w-full bg-secondary rounded-full h-2">
                     <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${stats?.engagement.onlineBookingRate || 0}%` }} />
                   </div>
                 </div>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-muted-foreground">Ovaj mesec — online:</span>
+                  <span className="font-medium text-primary">{stats?.bookings.onlineThisMonth || 0}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Ovaj mesec — ručno:</span>
+                  <span className="font-medium">{stats?.bookings.manualThisMonth || 0}</span>
+                </div>
+                <p className="text-xs text-muted-foreground pt-1">
+                  Viša online stopa = klijenti aktivno koriste booking stranicu
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Kvalitet termina */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Kvalitet termina
+                </CardTitle>
+                <CardDescription>Stope završavanja, otkazivanja i nedolazaka</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-muted-foreground">Stopa završavanja:</span>
@@ -1067,22 +1317,71 @@ export default function SalonBusinessPage() {
                     <div className="bg-success rounded-full h-2 transition-all" style={{ width: `${stats?.engagement.completionRate || 0}%` }} />
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground pt-1">
-                  Online = zakazano preko platforme (ima link za upravljanje)
-                </p>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm text-muted-foreground">Otkazano:</span>
+                  <span className={`font-medium ${getCancellationRate() > 20 ? 'text-destructive' : ''}`}>
+                    {stats?.bookings.cancelled || 0} ({getCancellationRate()}%)
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Nije došao:</span>
+                  <span className={`font-medium ${getNoShowRate() > 10 ? 'text-destructive' : ''}`}>
+                    {stats?.bookings.noShow || 0} ({getNoShowRate()}%)
+                  </span>
+                </div>
+                {(getCancellationRate() > 20 || getNoShowRate() > 10) && (
+                  <p className="text-xs text-destructive pt-1">
+                    Visoka stopa otkazivanja/nedolazaka
+                  </p>
+                )}
               </CardContent>
             </Card>
 
+            {/* Podešavanje profila */}
             <Card>
-              <CardHeader><CardTitle className="text-sm">Profil salona</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Building className="h-4 w-4" />
+                  Podešavanje profila
+                </CardTitle>
+                <CardDescription>Koliko je salon konfigurisao aplikaciju</CardDescription>
+              </CardHeader>
               <CardContent className="space-y-3">
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Broj usluga:</span><span className="font-medium">{stats?.services.total || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Aktivnih:</span><span className="text-success">{stats?.services.active || 0}</span></div>
-                <div className="flex items-center justify-between"><span className="text-sm text-muted-foreground">Radnih dana:</span><span>{stats?.activity.workingDays || 0}</span></div>
-                <div className="flex items-center justify-between pt-2 border-t">
-                  <span className="text-sm text-muted-foreground">Poslednja aktivnost:</span>
-                  <span className="text-sm">{stats?.bookings.lastActivityDate ? new Date(stats.bookings.lastActivityDate).toLocaleDateString('sr-RS') : 'Nema'}</span>
-                </div>
+                {(() => {
+                  const profile = getProfileCompleteness()
+                  return (
+                    <>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm text-muted-foreground">Kompletnost:</span>
+                          <span className="font-bold">{profile.score}%</span>
+                        </div>
+                        <div className="w-full bg-secondary rounded-full h-2">
+                          <div
+                            className={`rounded-full h-2 transition-all ${profile.score === 100 ? 'bg-success' : profile.score >= 50 ? 'bg-primary' : 'bg-warning'}`}
+                            style={{ width: `${profile.score}%` }}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2 pt-2 border-t">
+                        {profile.items.map((item) => (
+                          <div key={item.label} className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">{item.label}</span>
+                            {item.done ? (
+                              <CheckCircle2 className="h-4 w-4 text-success" />
+                            ) : (
+                              <X className="h-4 w-4 text-muted-foreground/40" />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-sm text-muted-foreground">Blokiranih termina:</span>
+                        <span className="font-medium">{stats?.activity.blockedSlots || 0}</span>
+                      </div>
+                    </>
+                  )
+                })()}
               </CardContent>
             </Card>
           </div>

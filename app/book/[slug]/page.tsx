@@ -600,34 +600,43 @@ export default function BookingPage() {
                             <ChevronDown className="w-4 h-4 opacity-60" />
                           </button>
                           {showCountryDropdown && (
-                            <div
-                              className="absolute top-full left-0 mt-1 w-56 max-h-60 overflow-auto rounded-lg z-50"
-                              style={{
-                                backgroundColor: colors.card,
-                                border: `2px solid ${colors.border}`,
-                                boxShadow: `4px 4px 0px ${colors.shadowColor}`,
-                              }}
-                            >
-                              {COUNTRY_CODES.map((c) => (
-                                <button
-                                  key={c.code}
-                                  type="button"
-                                  onClick={() => {
-                                    setCountryCode(c.code)
-                                    setShowCountryDropdown(false)
-                                  }}
-                                  className="w-full px-3 py-2 text-left text-sm font-medium flex items-center gap-2"
-                                  style={{
-                                    backgroundColor: countryCode === c.code ? colors.headerBg : 'transparent',
-                                    color: colors.foreground,
-                                  }}
-                                >
-                                  <span>{c.flag}</span>
-                                  <span className="font-bold">+{c.code}</span>
-                                  <span className="opacity-60">{c.country}</span>
-                                </button>
-                              ))}
-                            </div>
+                            <>
+                              <div className="fixed inset-0 z-40" onClick={() => setShowCountryDropdown(false)} />
+                              <div
+                                className="absolute top-full left-0 mt-1 w-56 max-h-60 overflow-auto rounded-lg z-50"
+                                style={{
+                                  backgroundColor: colors.card,
+                                  border: `2px solid ${colors.border}`,
+                                  boxShadow: `4px 4px 0px ${colors.shadowColor}`,
+                                }}
+                              >
+                                {COUNTRY_CODES.map((c) => (
+                                  <button
+                                    key={c.code}
+                                    type="button"
+                                    onClick={() => {
+                                      setCountryCode(c.code)
+                                      setShowCountryDropdown(false)
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm font-medium flex items-center gap-2"
+                                    style={{
+                                      backgroundColor: countryCode === c.code ? colors.headerBg : 'transparent',
+                                      color: colors.foreground,
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (countryCode !== c.code) e.currentTarget.style.backgroundColor = colors.headerBg
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (countryCode !== c.code) e.currentTarget.style.backgroundColor = 'transparent'
+                                    }}
+                                  >
+                                    <span>{c.flag}</span>
+                                    <span className="font-bold">+{c.code}</span>
+                                    <span className="opacity-60">{c.country}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </>
                           )}
                         </div>
                         {/* Phone Number Input */}

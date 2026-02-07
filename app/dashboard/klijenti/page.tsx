@@ -23,7 +23,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { Search, Users, Calendar, DollarSign, Plus, Loader2 } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Search, Users, Calendar, DollarSign, Plus, Loader2, ChevronDown, Trash2 } from 'lucide-react'
+import { COUNTRY_CODES, formatInternationalPhone, parseInternationalPhone } from '@/lib/phone-utils'
 import { format } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 
@@ -74,6 +85,13 @@ function ClientsPageContent() {
     name: '',
     notes: '',
   })
+  const [countryCode, setCountryCode] = useState('381')
+  const [phoneNumber, setPhoneNumber] = useState('')
+  const [showCountryDropdown, setShowCountryDropdown] = useState(false)
+
+  // Delete dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null)
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -130,10 +148,22 @@ function ClientsPageContent() {
         name: client.name || '',
         notes: client.notes || '',
       })
+      // Parse existing phone to pre-fill dropdown
+      const parsed = parseInternationalPhone(client.phone)
+      if (parsed) {
+        setCountryCode(parsed.countryCode)
+        setPhoneNumber(parsed.localNumber)
+      } else {
+        setCountryCode('381')
+        setPhoneNumber(client.phone)
+      }
     } else {
       setEditingClient(null)
       setClientForm({ phone: '', name: '', notes: '' })
+      setCountryCode('381')
+      setPhoneNumber('')
     }
+    setShowCountryDropdown(false)
     setClientDialogOpen(true)
   }
 
@@ -142,6 +172,7 @@ function ClientsPageContent() {
     setSubmitting(true)
 
     try {
+      const combinedPhone = formatInternationalPhone(countryCode, phoneNumber)
       const url = editingClient
         ? `/api/dashboard/clients/${editingClient.id}`
         : '/api/dashboard/clients'
@@ -150,7 +181,7 @@ function ClientsPageContent() {
         method: editingClient ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: clientForm.phone,
+          phone: combinedPhone,
           name: clientForm.name || null,
           notes: clientForm.notes || null,
         }),
@@ -168,6 +199,35 @@ function ClientsPageContent() {
       alert('Greška pri čuvanju klijenta')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleDeleteClient = (client: Client) => {
+    setClientToDelete(client)
+    setDeleteDialogOpen(true)
+  }
+
+  const confirmDeleteClient = async () => {
+    if (!clientToDelete) return
+
+    try {
+      const response = await fetch(`/api/dashboard/clients/${clientToDelete.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        fetchClients(search)
+        setDetailDialogOpen(false)
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Greška pri brisanju klijenta')
+      }
+    } catch (error) {
+      console.error('Error deleting client:', error)
+      alert('Greška pri brisanju klijenta')
+    } finally {
+      setDeleteDialogOpen(false)
+      setClientToDelete(null)
     }
   }
 
@@ -278,7 +338,7 @@ function ClientsPageContent() {
                       <TableRow
                         key={client.id}
                         className="border-border h-14 cursor-pointer hover:bg-secondary/50"
-                        onClick={() => openClientDialog(client)}
+                        onClick={() => handleViewClient(client.id)}
                       >
                         <TableCell className="font-mono">{client.phone}</TableCell>
                         <TableCell>{client.name || '-'}</TableCell>
@@ -289,16 +349,27 @@ function ClientsPageContent() {
                             ? format(new Date(client.lastVisit), 'd. MMM yyyy', { locale: srLatn })
                             : '-'}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right space-x-1">
                           <Button
                             variant="outline"
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation()
-                              handleViewClient(client.id)
+                              openClientDialog(client)
                             }}
                           >
-                            Detalji
+                            Izmeni
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteClient(client)
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -313,7 +384,7 @@ function ClientsPageContent() {
                   <div
                     key={client.id}
                     className="p-4 rounded-lg bg-secondary/30 border border-border cursor-pointer hover:bg-secondary/50 transition-colors"
-                    onClick={() => openClientDialog(client)}
+                    onClick={() => handleViewClient(client.id)}
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -341,10 +412,21 @@ function ClientsPageContent() {
                         className="flex-1 h-10"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleViewClient(client.id)
+                          openClientDialog(client)
                         }}
                       >
-                        Detalji
+                        Izmeni
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteClient(client)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </div>
                   </div>
@@ -448,6 +530,27 @@ function ClientsPageContent() {
               </div>
             </div>
           )}
+          {selectedClient && (
+            <DialogFooter>
+              <Button
+                variant="destructive"
+                className="w-full sm:w-auto sm:mr-auto"
+                onClick={() => handleDeleteClient(selectedClient)}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Obriši klijenta
+              </Button>
+              <Button variant="outline" onClick={() => setDetailDialogOpen(false)}>
+                Zatvori
+              </Button>
+              <Button onClick={() => {
+                setDetailDialogOpen(false)
+                openClientDialog(selectedClient)
+              }}>
+                Izmeni
+              </Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -462,15 +565,54 @@ function ClientsPageContent() {
           </DialogHeader>
           <form onSubmit={handleSaveClient} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="client-phone">Telefon *</Label>
-              <Input
-                id="client-phone"
-                type="tel"
-                placeholder="+381 60 123 4567"
-                value={clientForm.phone}
-                onChange={(e) => setClientForm({ ...clientForm, phone: e.target.value })}
-                required
-              />
+              <Label>Telefon *</Label>
+              <div className="flex gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowCountryDropdown(!showCountryDropdown)}
+                    className="h-10 px-3 flex items-center gap-1 rounded-md border border-input bg-background text-sm min-w-[90px] justify-between hover:bg-secondary/50"
+                  >
+                    <span>
+                      {COUNTRY_CODES.find(c => c.code === countryCode)?.flag} +{countryCode}
+                    </span>
+                    <ChevronDown className="w-4 h-4 opacity-60" />
+                  </button>
+                  {showCountryDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowCountryDropdown(false)} />
+                      <div className="absolute top-full left-0 mt-1 w-56 max-h-60 overflow-auto rounded-md border border-input bg-background shadow-md z-50">
+                        {COUNTRY_CODES.map((c) => (
+                          <button
+                            key={c.code}
+                            type="button"
+                            onClick={() => {
+                              setCountryCode(c.code)
+                              setShowCountryDropdown(false)
+                            }}
+                            className={`w-full px-3 py-2 text-left text-sm flex items-center gap-2 hover:bg-secondary/50 ${
+                              countryCode === c.code ? 'bg-secondary' : ''
+                            }`}
+                          >
+                            <span>{c.flag}</span>
+                            <span className="font-medium">+{c.code}</span>
+                            <span className="text-muted-foreground">{c.country}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <Input
+                  type="tel"
+                  placeholder="60 123 4567"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  required
+                  className="flex-1"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">Sa ili bez početne nule (060... ili 60...)</p>
             </div>
 
             <div className="space-y-2">
@@ -495,16 +637,49 @@ function ClientsPageContent() {
             </div>
 
             <DialogFooter className="gap-2">
+              {editingClient && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="sm:mr-auto"
+                  onClick={() => handleDeleteClient(editingClient)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Obriši
+                </Button>
+              )}
               <Button type="button" variant="outline" onClick={() => setClientDialogOpen(false)}>
                 Otkaži
               </Button>
-              <Button type="submit" disabled={submitting || !clientForm.phone}>
+              <Button type="submit" disabled={submitting || !phoneNumber}>
                 {submitting ? 'Čuvanje...' : editingClient ? 'Sačuvaj' : 'Dodaj klijenta'}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Client Confirmation */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Brisanje klijenta</AlertDialogTitle>
+            <AlertDialogDescription>
+              Da li ste sigurni da želite da obrišete klijenta {clientToDelete?.name ? `"${clientToDelete.name}"` : clientToDelete?.phone}?
+              Sva završena zakazivanja ovog klijenta će takođe biti obrisana. Ova akcija se ne može poništiti.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Odustani</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteClient}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Obriši
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

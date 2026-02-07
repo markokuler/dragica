@@ -94,6 +94,42 @@ export async function GET(
       ? Math.round(((completedBookings || 0) / totalBookings) * 100)
       : 0
 
+    // Cancelled bookings count
+    const { count: cancelledBookings } = await supabase
+      .from('bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', id)
+      .eq('status', 'cancelled')
+
+    // No-show bookings count
+    const { count: noShowBookings } = await supabase
+      .from('bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', id)
+      .eq('status', 'no_show')
+
+    // Blocked slots count (feature adoption)
+    const { count: blockedSlotsCount } = await supabase
+      .from('blocked_slots')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', id)
+
+    // Online bookings this month
+    const { count: onlineBookingsThisMonth } = await supabase
+      .from('bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', id)
+      .not('manage_token', 'is', null)
+      .gte('start_datetime', startOfMonth)
+
+    // Manual bookings this month (no manage_token)
+    const { count: manualBookingsThisMonth } = await supabase
+      .from('bookings')
+      .select('*', { count: 'exact', head: true })
+      .eq('tenant_id', id)
+      .is('manage_token', null)
+      .gte('start_datetime', startOfMonth)
+
     // Get owner's created_at (from users table)
     const { data: ownerData } = await supabase
       .from('users')
@@ -115,6 +151,10 @@ export async function GET(
           total: totalBookings || 0,
           thisMonth: monthBookings || 0,
           lastMonth: lastMonthBookings || 0,
+          cancelled: cancelledBookings || 0,
+          noShow: noShowBookings || 0,
+          onlineThisMonth: onlineBookingsThisMonth || 0,
+          manualThisMonth: manualBookingsThisMonth || 0,
           lastActivityDate: lastBookingData?.start_datetime
             ? lastBookingData.start_datetime.split('T')[0]
             : null,
@@ -133,6 +173,7 @@ export async function GET(
         activity: {
           ownerCreatedAt: ownerData?.created_at || null,
           workingDays: workingDays || 0,
+          blockedSlots: blockedSlotsCount || 0,
         },
       },
     })

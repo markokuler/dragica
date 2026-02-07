@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUserWithRole, getEffectiveTenantId } from '@/lib/auth'
-import { getStoredPhoneVariations, cleanPhoneNumber } from '@/lib/phone-utils'
+import { normalizePhoneForDB, cleanPhoneNumber } from '@/lib/phone-utils'
 
 export async function GET(request: NextRequest) {
   try {
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 
     // Clean phone - expect international format from dashboard
     const cleanedPhone = customer_phone.startsWith('+') ? customer_phone : `+${cleanPhoneNumber(customer_phone)}`
-    const phoneVariations = getStoredPhoneVariations(cleanedPhone)
+    const normalized = normalizePhoneForDB(cleanedPhone)
 
     // Find or create customer
     let customerId: string
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
       .from('customers')
       .select('id, phone')
       .eq('tenant_id', tenantId)
-      .in('phone', phoneVariations)
+      .eq('phone_normalized', normalized)
       .limit(1)
       .single()
 

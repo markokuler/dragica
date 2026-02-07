@@ -1,128 +1,193 @@
-# 🚀 Dragica.app - Deployment Guide
+# Dragica - Deployment Guide
 
-## Pre-Deploy Checklist
+## 3-Environment Setup
 
-### 1. Supabase Production Setup
-- [ ] Kreiraj novi Supabase projekat na [supabase.com](https://supabase.com)
-- [ ] Kopiraj SQL šemu iz development projekta (Settings → Database → Backup)
-- [ ] Kreiraj Storage bucket `salon-assets` (public)
-- [ ] Kopiraj API ključeve (Settings → API)
+| Environment | Branch | App Host | Database | Auto-Deploy |
+|-------------|--------|----------|----------|-------------|
+| **Production** | `main` | Vercel (dragica.app) | Supabase `dakmcfvhsfshkssmeqoy` | Yes |
+| **Staging** | `staging` | Vercel Preview (SSO) | Supabase `ammlbwvefnylqvorrilr` | Yes |
+| **Local** | any | localhost:3000 | Docker (`supabase start`) | Manual |
 
-### 2. Environment Variables za Vercel
-Dodaj ove varijable u Vercel Dashboard → Settings → Environment Variables:
+---
 
+## Staging Deployment
+
+### App Code
+```bash
+git checkout staging
+# ... make changes ...
+git add <files>
+git commit -m "description"
+git push origin staging
+# Vercel auto-deploys Preview
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://tvoj-projekat.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=tvoj-anon-key
-SUPABASE_SERVICE_ROLE_KEY=tvoj-service-role-key
+
+### Database Migrations (if new migrations exist)
+```bash
+# 1. Link to staging
+supabase link --project-ref ammlbwvefnylqvorrilr
+
+# 2. Dry-run first (ALWAYS)
+SUPABASE_ACCESS_TOKEN=<token> supabase db push --dry-run
+
+# 3. Push migrations
+SUPABASE_ACCESS_TOKEN=<token> supabase db push
+
+# 4. Relink to production (ALWAYS do this after)
+supabase link --project-ref dakmcfvhsfshkssmeqoy
+```
+
+### Seed Data (staging only)
+```bash
+supabase link --project-ref ammlbwvefnylqvorrilr
+SUPABASE_ACCESS_TOKEN=<token> supabase db push --include-seed
+supabase link --project-ref dakmcfvhsfshkssmeqoy  # relink
+```
+
+---
+
+## Production Deployment
+
+### App Code
+```bash
+git checkout main
+git merge staging          # merge when satisfied with staging
+git push origin main       # Vercel auto-deploys Production
+```
+
+### Database Migrations (if new migrations exist)
+```bash
+# 1. Already linked to production (default)
+# Verify: check .supabase/.temp/project-ref
+
+# 2. Dry-run first (ALWAYS)
+SUPABASE_ACCESS_TOKEN=<token> supabase db push --dry-run
+
+# 3. Push migrations
+SUPABASE_ACCESS_TOKEN=<token> supabase db push
+```
+
+### CRITICAL RULES
+- **NIKADA** ne salji seed data na production
+- **NIKADA** ne salji test korisnike na production
+- **SAMO** app kod (git push) + schema migracije (supabase db push)
+- UVEK `--dry-run` prvo
+
+---
+
+## Vercel Environment Variables
+
+### Production (main branch)
+```
+NEXT_PUBLIC_SUPABASE_URL=https://dakmcfvhsfshkssmeqoy.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<production-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<production-service-role-key>
 NEXT_PUBLIC_APP_URL=https://dragica.app
 NEXT_PUBLIC_BASE_DOMAIN=dragica.app
 ```
 
-Opciono (za notifikacije):
+### Preview (staging branch)
 ```
-INFOBIP_BASE_URL=https://xxxxx.api.infobip.com
-INFOBIP_API_KEY=tvoj-infobip-key
-INFOBIP_WHATSAPP_SENDER=447860088970
-INFOBIP_VIBER_SENDER=IBSelfServe
+NEXT_PUBLIC_SUPABASE_URL=https://ammlbwvefnylqvorrilr.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<staging-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<staging-service-role-key>
+NEXT_PUBLIC_APP_URL=https://dragica-web-app-git-staging-markos-projects-bdb2b3bf.vercel.app
+NEXT_PUBLIC_BASE_DOMAIN=dragica-web-app-git-staging-markos-projects-bdb2b3bf.vercel.app
+DEMO_ADMIN_EMAIL=demo-admin@dragica.local
+DEMO_ADMIN_PASSWORD=demo1234
+DEMO_OWNER_EMAIL=demo-salon@dragica.local
+DEMO_OWNER_PASSWORD=demo1234
+CRON_SECRET=staging-cron-secret-dragica
 ```
+
+Env vars are managed in Vercel Dashboard -> Settings -> Environment Variables.
+Production and Preview environments have separate values.
 
 ---
 
-## Deployment na Vercel
+## Custom Domain (dragica.app)
 
-### Korak 1: Povezivanje sa GitHub
-1. Idi na [vercel.com](https://vercel.com)
-2. Sign in sa GitHub nalogom
-3. "Add New..." → "Project"
-4. Izaberi `dragica-web-app` repository
-5. Framework: Next.js (automatski detektovan)
-
-### Korak 2: Environment Variables
-1. Pre klika na "Deploy", dodaj Environment Variables
-2. Kopiraj vrednosti iz gornje sekcije
-3. Klikni "Deploy"
-
-### Korak 3: Custom Domain (dragica.app)
-1. Po završetku deploya, idi u Settings → Domains
-2. Klikni "Add"
-3. Unesi `dragica.app`
-4. Pošto si kupio domen preko Vercel-a, DNS je automatski konfigurisan!
-5. Dodaj i `www.dragica.app` → redirect na `dragica.app`
+Domain is purchased through Vercel, DNS is automatic.
+- `dragica.app` -> Production
+- `www.dragica.app` -> Redirect to `dragica.app`
 
 ---
 
-## URL Struktura u Produkciji
+## URL Structure
 
-| Stranica | URL |
-|----------|-----|
-| Landing | https://dragica.app |
-| Login | https://dragica.app/login |
-| Admin | https://dragica.app/admin |
-| Dashboard | https://dragica.app/dashboard |
-| **Booking** | https://dragica.app/book/{slug} |
-| Potvrda | https://dragica.app/book/{slug}/potvrda |
-| Izmena | https://dragica.app/book/{slug}/izmena/{token} |
+| Page | Production | Staging |
+|------|------------|---------|
+| Landing | dragica.app | staging-preview.vercel.app |
+| Login | dragica.app/login | staging-preview.vercel.app/login |
+| Admin | dragica.app/admin | staging-preview.vercel.app/admin |
+| Dashboard | dragica.app/dashboard | staging-preview.vercel.app/dashboard |
+| Booking | dragica.app/book/{slug} | staging-preview.vercel.app/book/{slug} |
 
 ---
 
-## Post-Deploy Testiranje
+## Cron Jobs
 
-### Kritični Testovi
-- [ ] Landing page učitava se
-- [ ] Login radi (koristi test kredencijale)
-- [ ] Admin panel dostupan
-- [ ] Dashboard salon vidljiv
-- [ ] Public booking: `/book/test-salon` radi
-- [ ] Booking flow: izaberi uslugu → datum → vreme → potvrdi
-- [ ] HTTPS aktivan (zeleni lokot)
+Defined in `vercel.json`:
+```json
+{
+  "crons": [{
+    "path": "/api/cron/reset-demo",
+    "schedule": "0 3 * * *"
+  }]
+}
+```
 
-### Test Scenario (End-to-End)
-1. Otvori `https://dragica.app/admin`
-2. Login kao admin
-3. Kreiraj test salon sa slug-om `test-salon`
-4. Dodaj uslugu (npr. "Manikir", 30min, 1500 RSD)
-5. Otvori `https://dragica.app/book/test-salon`
-6. Zakaži termin
-7. Proveri da li se prikazuje na Dashboard → Kalendar
+- Runs daily at 3 AM UTC
+- Resets demo salon data
+- Protected by `CRON_SECRET` header
 
 ---
 
-## Automatski Deploys
+## Post-Deploy Checklist
 
-Vercel automatski deploya svaki push na `main` branch:
-```
-git add .
-git commit -m "Update feature X"
-git push origin main
-```
+### After Staging Deploy
+- [ ] Landing page loads
+- [ ] Demo buttons work (admin + salon)
+- [ ] Login works with test accounts
+- [ ] Admin panel accessible
+- [ ] Dashboard accessible
+- [ ] Public booking works
 
-Za preview deploys (feature branches):
-```
-git checkout -b feature/nova-funkcionalnost
-# ... changes ...
-git push origin feature/nova-funkcionalnost
-```
-Vercel kreira preview URL: `dragica-web-app-xyz.vercel.app`
+### After Production Deploy
+- [ ] Landing page loads
+- [ ] Login works
+- [ ] Admin panel accessible
+- [ ] Existing salon data intact
+- [ ] Public booking works
+- [ ] HTTPS active
 
 ---
 
 ## Troubleshooting
 
 ### Build Failed
-1. Proveri Vercel logs: Deployments → klikni na failed deploy → View Build Logs
-2. Često uzroci: missing env variables, TypeScript greške
+1. Check Vercel logs: Deployments -> failed deploy -> View Build Logs
+2. Common: missing env vars, TypeScript errors
 
-### 500 Error na API
-1. Vercel Functions logs: Settings → Functions → Logs
-2. Supabase logs: Database → Logs
+### Env Vars Not Working
+1. Verify target (Production vs Preview) in Vercel dashboard
+2. After adding new env vars, push a new commit to trigger fresh deploy
 
-### Domain Issues
-1. DNS propagacija može trajati do 48h (retko)
-2. Proveri: Settings → Domains → zelena kvačica
+### Migration Errors
+1. `uuid_generate_v4()` not found -> Run in SQL Editor:
+   ```sql
+   ALTER DATABASE postgres SET search_path TO public, extensions;
+   ```
+2. Always check which project-ref is linked: `cat .supabase/.temp/project-ref`
 
----
+### Supabase CLI Not Linked
+```bash
+# Check current link
+cat .supabase/.temp/project-ref
 
-## Kontakti za Pomoć
-- Vercel Support: help.vercel.com
-- Supabase Discord: discord.supabase.com
+# Relink to production (default)
+supabase link --project-ref dakmcfvhsfshkssmeqoy
+
+# Relink to staging (temporary, always relink back)
+supabase link --project-ref ammlbwvefnylqvorrilr
+```
