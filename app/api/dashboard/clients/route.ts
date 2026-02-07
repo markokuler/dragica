@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient()
 
     const body = await request.json()
-    const { phone, name } = body
+    const { phone, name, notes } = body
 
     if (!phone) {
       return NextResponse.json({ error: 'Telefon je obavezan' }, { status: 400 })
@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
         tenant_id: tenantId,
         phone: cleanedPhone, // Store in international format
         name: name || null,
+        notes: notes || null,
       })
       .select()
       .single()

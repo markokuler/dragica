@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,7 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Search, Users, Calendar, DollarSign, Plus } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Search, Users, Calendar, DollarSign, Plus, Loader2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 
@@ -30,6 +31,7 @@ interface Client {
   id: string
   phone: string
   name: string | null
+  notes: string | null
   totalBookings: number
   totalSpent: number
   lastVisit: string | null
@@ -70,12 +72,10 @@ function ClientsPageContent() {
   const [clientForm, setClientForm] = useState({
     phone: '',
     name: '',
+    notes: '',
   })
 
-  useEffect(() => {
-    const initialSearch = searchParams.get('q')
-    fetchClients(initialSearch || undefined)
-  }, [])
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchClients = async (searchTerm?: string) => {
     try {
@@ -92,17 +92,24 @@ function ClientsPageContent() {
     }
   }
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    fetchClients(search)
-    // Update URL with search query
-    if (search) {
-      router.replace(`${pathname}?q=${encodeURIComponent(search)}`, { scroll: false })
-    } else {
-      router.replace(pathname, { scroll: false })
+  // Dynamic search with debounce
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    debounceRef.current = setTimeout(() => {
+      setLoading(true)
+      fetchClients(search || undefined)
+      if (search) {
+        router.replace(`${pathname}?q=${encodeURIComponent(search)}`, { scroll: false })
+      } else {
+        router.replace(pathname, { scroll: false })
+      }
+    }, 300)
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-  }
+  }, [search])
 
   const handleViewClient = async (clientId: string) => {
     try {
@@ -121,10 +128,11 @@ function ClientsPageContent() {
       setClientForm({
         phone: client.phone,
         name: client.name || '',
+        notes: client.notes || '',
       })
     } else {
       setEditingClient(null)
-      setClientForm({ phone: '', name: '' })
+      setClientForm({ phone: '', name: '', notes: '' })
     }
     setClientDialogOpen(true)
   }
@@ -144,6 +152,7 @@ function ClientsPageContent() {
         body: JSON.stringify({
           phone: clientForm.phone,
           name: clientForm.name || null,
+          notes: clientForm.notes || null,
         }),
       })
 
@@ -178,18 +187,18 @@ function ClientsPageContent() {
       {/* Search - prioritized on mobile */}
       <Card className="md:order-2">
         <CardContent className="pt-4 md:pt-6">
-          <form onSubmit={handleSearch} className="flex gap-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Ime ili telefon..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1"
+              className="pl-9 pr-9"
             />
-            <Button type="submit" className="px-3 sm:px-4">
-              <Search className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">Pretraži</span>
-            </Button>
-          </form>
+            {loading && search && (
+              <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -378,6 +387,13 @@ function ClientsPageContent() {
                 </div>
               </div>
 
+              {selectedClient.notes && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Napomene</p>
+                  <p className="text-sm p-3 rounded-lg bg-secondary/50">{selectedClient.notes}</p>
+                </div>
+              )}
+
               <div>
                 <h4 className="font-semibold mb-3">Istorija zakazivanja</h4>
                 {selectedClient.bookings.length === 0 ? (
@@ -464,6 +480,17 @@ function ClientsPageContent() {
                 placeholder="Marija Petrović"
                 value={clientForm.name}
                 onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="client-notes">Napomene (opciono)</Label>
+              <Textarea
+                id="client-notes"
+                placeholder="Alergija na gel, preferira prirodne boje..."
+                value={clientForm.notes}
+                onChange={(e) => setClientForm({ ...clientForm, notes: e.target.value })}
+                rows={3}
               />
             </div>
 

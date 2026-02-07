@@ -56,32 +56,18 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', tenantId)
 
-    // Calculate monthly revenue from completed bookings
-    const { data: completedBookings } = await supabase
-      .from('bookings')
-      .select('service_id, services(price)')
-      .eq('tenant_id', tenantId)
-      .eq('status', 'completed')
-      .gte('start_datetime', firstDayOfMonth.toISOString())
-
-    let monthlyRevenue = 0
-    if (completedBookings) {
-      monthlyRevenue = completedBookings.reduce((sum, booking) => {
-        const price = (booking.services as any)?.price || 0
-        return sum + price
-      }, 0)
-    }
-
-    // Also add manual income from financial_entries
-    const { data: manualIncome } = await supabase
+    // Calculate monthly revenue from financial_entries only
+    // (completed bookings automatically create financial_entries, so counting both would double-count)
+    const { data: monthlyIncome } = await supabase
       .from('financial_entries')
       .select('amount')
       .eq('tenant_id', tenantId)
       .eq('type', 'income')
       .gte('entry_date', firstDayOfMonth.toISOString().split('T')[0])
 
-    if (manualIncome) {
-      monthlyRevenue += manualIncome.reduce((sum, entry) => sum + Number(entry.amount), 0)
+    let monthlyRevenue = 0
+    if (monthlyIncome) {
+      monthlyRevenue = monthlyIncome.reduce((sum, entry) => sum + Number(entry.amount), 0)
     }
 
     return NextResponse.json({

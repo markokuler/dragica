@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Plus, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight } from 'lucide-react'
+import { Plus, TrendingUp, TrendingDown, DollarSign, ArrowUpRight, ArrowDownRight, Globe, UserPen } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, subMonths, subDays, isSameDay, isSameMonth } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 import {
@@ -33,7 +33,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts'
 
 // Chart colors matching the design system
@@ -45,10 +44,12 @@ const CHART_COLORS = {
   grid: '#3D4556',        // border color (updated)
 }
 
-type ChartPeriod = 'days' | 'months'
+type ChartPeriod = 'days-7' | 'days-14' | 'days-30' | 'months'
 
 const PERIOD_OPTIONS: { value: ChartPeriod; label: string }[] = [
-  { value: 'days', label: 'Po danima' },
+  { value: 'days-7', label: '7 dana' },
+  { value: 'days-14', label: '14 dana' },
+  { value: 'days-30', label: '30 dana' },
   { value: 'months', label: 'Po mesecima' },
 ]
 
@@ -146,7 +147,7 @@ function FinancesPageContent() {
 
   const fetchEntries = async () => {
     try {
-      const response = await fetch('/api/dashboard/finances')
+      const response = await fetch('/api/dashboard/finances?limit=2000')
       const data = await response.json()
       setEntries(data.entries || [])
     } catch (error) {
@@ -242,17 +243,21 @@ function FinancesPageContent() {
   const weekStats = calculateStats(entries, firstDayOfWeek)
   const monthStats = calculateStats(entries, firstDayOfMonth)
 
+  const isDaysView = chartPeriod.startsWith('days')
+
   // Prepare chart data based on selected period
   const chartData = useMemo(() => {
     const now = new Date()
     const data: { name: string; fullName: string; income: number; expense: number; date: Date }[] = []
 
-    if (chartPeriod === 'days') {
-      // Last 14 days
-      for (let i = 13; i >= 0; i--) {
+    if (isDaysView) {
+      const dayCount = chartPeriod === 'days-7' ? 7 : chartPeriod === 'days-14' ? 14 : 30
+      for (let i = dayCount - 1; i >= 0; i--) {
         const date = subDays(now, i)
         data.push({
-          name: format(date, 'd. MMM', { locale: srLatn }),
+          name: dayCount <= 14
+            ? format(date, 'd. MMM', { locale: srLatn })
+            : format(date, 'd.', { locale: srLatn }),
           fullName: format(date, 'EEEE, d. MMMM yyyy', { locale: srLatn }),
           income: 0,
           expense: 0,
@@ -298,20 +303,13 @@ function FinancesPageContent() {
     }
 
     return data
-  }, [entries, chartPeriod])
+  }, [entries, chartPeriod, isDaysView])
 
   // Handle chart bar click
   const handleChartClick = (data: { name: string; date: Date } | null) => {
     if (data) {
-      if (chartPeriod === 'months') {
-        // Set dropdown filter to the clicked month
-        setTransactionFilter(data.date.getMonth().toString())
-        setSelectedChartDate(null)
-      } else {
-        // For days, use selectedChartDate since days aren't in dropdown
-        setSelectedChartDate(data.date)
-        setTransactionFilter('all')
-      }
+      setSelectedChartDate(data.date)
+      setTransactionFilter('all')
     }
   }
 
@@ -326,19 +324,17 @@ function FinancesPageContent() {
 
     // If chart date is selected, filter by that
     if (selectedChartDate) {
-      if (chartPeriod === 'days') {
+      if (isDaysView) {
         filtered = filtered.filter((e) => isSameDay(new Date(e.entry_date), selectedChartDate))
       } else {
         filtered = filtered.filter((e) => isSameMonth(new Date(e.entry_date), selectedChartDate))
       }
     } else if (transactionFilter !== 'all') {
-      // Filter by selected month (0-11)
+      // Filter by selected month (0-11) - check all years
       const monthIndex = parseInt(transactionFilter, 10)
-      const now = new Date()
-      const year = now.getFullYear()
       filtered = filtered.filter((e) => {
         const entryDate = new Date(e.entry_date)
-        return entryDate.getMonth() === monthIndex && entryDate.getFullYear() === year
+        return entryDate.getMonth() === monthIndex
       })
     }
 
@@ -362,7 +358,7 @@ function FinancesPageContent() {
     }
 
     return filtered
-  }, [entries, selectedChartDate, chartPeriod, transactionFilter, typeFilter, categoryFilter, sourceFilter])
+  }, [entries, selectedChartDate, isDaysView, transactionFilter, typeFilter, categoryFilter, sourceFilter])
 
 
   return (
@@ -455,11 +451,15 @@ function FinancesPageContent() {
           <div>
             <CardTitle>Pregled finansija</CardTitle>
             <CardDescription>
-              {chartPeriod === 'days' && 'Poslednjih 14 dana'}
+              {chartPeriod === 'days-7' && 'Poslednjih 7 dana'}
+              {chartPeriod === 'days-14' && 'Poslednjih 14 dana'}
+              {chartPeriod === 'days-30' && 'Poslednjih 30 dana'}
               {chartPeriod === 'months' && 'Poslednjih 6 meseci'}
-              {chartPeriod === 'days' && selectedChartDate && (
+              {selectedChartDate && (
                 <span className="ml-2 text-primary">
-                  • {format(selectedChartDate, 'd. MMM', { locale: srLatn })}
+                  • {isDaysView
+                    ? format(selectedChartDate, 'd. MMM', { locale: srLatn })
+                    : format(selectedChartDate, 'MMMM yyyy', { locale: srLatn })}
                 </span>
               )}
             </CardDescription>
@@ -481,6 +481,16 @@ function FinancesPageContent() {
           </Select>
         </CardHeader>
         <CardContent className="p-2 sm:p-6 pt-0">
+          <div className="flex items-center justify-center gap-6 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.income }} />
+              <span className="text-sm font-medium">Prihodi</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.expense }} />
+              <span className="text-sm font-medium">Rashodi</span>
+            </div>
+          </div>
           <div className="h-[250px] sm:h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -543,14 +553,6 @@ function FinancesPageContent() {
                     return null
                   }}
                 />
-                <Legend
-                  wrapperStyle={{ color: CHART_COLORS.label }}
-                  formatter={(value) => (
-                    <span style={{ color: CHART_COLORS.label }}>
-                      {value === 'income' ? 'Prihodi' : 'Rashodi'}
-                    </span>
-                  )}
-                />
                 <Bar
                   dataKey="income"
                   name="income"
@@ -587,12 +589,15 @@ function FinancesPageContent() {
               <CardTitle>Transakcije</CardTitle>
                   <CardDescription>
                     {filteredEntries.length} unosa
-                    {chartPeriod === 'days' && selectedChartDate && (
+                    {selectedChartDate && (
                       <button
                         onClick={clearChartSelection}
                         className="ml-2 text-primary hover:underline"
                       >
-                        (poništi filter)
+                        ({isDaysView
+                          ? format(selectedChartDate, 'd. MMM', { locale: srLatn })
+                          : format(selectedChartDate, 'MMMM yyyy', { locale: srLatn })}
+                        {' '}- poništi)
                       </button>
                     )}
                   </CardDescription>
@@ -626,9 +631,11 @@ function FinancesPageContent() {
                   <SelectItem value="9">Oktobar</SelectItem>
                   <SelectItem value="10">Novembar</SelectItem>
                   <SelectItem value="11">Decembar</SelectItem>
-                  {chartPeriod === 'days' && selectedChartDate && (
+                  {selectedChartDate && (
                     <SelectItem value="chart" disabled>
-                      {format(selectedChartDate, 'd. MMM', { locale: srLatn })}
+                      {isDaysView
+                        ? format(selectedChartDate, 'd. MMM', { locale: srLatn })
+                        : format(selectedChartDate, 'MMMM yyyy', { locale: srLatn })}
                     </SelectItem>
                   )}
                 </SelectContent>
@@ -744,9 +751,21 @@ function FinancesPageContent() {
                           {entry.description && (
                             <p className="text-xs sm:text-sm text-muted-foreground truncate">{entry.description}</p>
                           )}
-                          <p className="text-sm text-muted-foreground">
-                            {format(new Date(entry.entry_date), 'd. MMM yyyy', { locale: srLatn })}
-                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>{format(new Date(entry.entry_date), 'd. MMM yyyy', { locale: srLatn })}</span>
+                            <span className="text-muted-foreground/30">·</span>
+                            {entry.booking_id ? (
+                              <span className="flex items-center gap-1 text-cyan-600">
+                                <Globe className="h-3 w-3" />
+                                <span className="text-xs">Dragica</span>
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1">
+                                <UserPen className="h-3 w-3" />
+                                <span className="text-xs">Ručno</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <p

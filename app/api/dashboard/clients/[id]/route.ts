@@ -84,11 +84,16 @@ export async function PUT(
     const supabase = createAdminClient()
 
     const body = await request.json()
-    const { name } = body
+    const { name, notes } = body
+
+    const updateData: Record<string, unknown> = { name }
+    if (notes !== undefined) {
+      updateData.notes = notes || null
+    }
 
     const { data: client, error } = await supabase
       .from('customers')
-      .update({ name })
+      .update(updateData)
       .eq('id', id)
       .eq('tenant_id', tenantId)
       .select()

@@ -40,7 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Plus, Calendar, ChevronLeft, ChevronRight, List, Pencil, Ban, Clock, X, Trash2 } from 'lucide-react'
+import { Plus, Calendar, ChevronLeft, ChevronRight, List, Pencil, Ban, Clock, X, Trash2, Globe, UserPen } from 'lucide-react'
 import { format, addDays, subDays, isSameDay, isToday, startOfDay, parseISO, isWithinInterval, isBefore, isAfter, setHours, setMinutes } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
 
@@ -49,6 +49,7 @@ interface Booking {
   start_datetime: string
   end_datetime: string
   status: string
+  manage_token: string | null
   service: {
     id: string
     name: string
@@ -415,6 +416,25 @@ function CalendarPageContent() {
     setBlockDialogOpen(true)
   }
 
+  const openBlockDialogForSlot = (time: string) => {
+    const today = format(selectedDate, 'yyyy-MM-dd')
+    // End time = slot time + 30 min
+    const [h, m] = time.split(':').map(Number)
+    const endMinutes = h * 60 + m + 30
+    const endH = String(Math.floor(endMinutes / 60)).padStart(2, '0')
+    const endM = String(endMinutes % 60).padStart(2, '0')
+    setBlockForm({
+      start_date: today,
+      start_time: time,
+      end_date: today,
+      end_time: `${endH}:${endM}`,
+      reason: '',
+    })
+    setBlockDialogOpen(true)
+  }
+
+  const isOnlineBooking = (b: Booking) => b.manage_token != null
+
   const handleBlockSlot = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
@@ -748,15 +768,42 @@ function CalendarPageContent() {
                                       {' · '}{booking.service.duration_minutes} min
                                     </p>
                                   </div>
-                                  <span className={`text-xs font-bold px-2 py-1 rounded ${getStatusColor(booking.status)} text-background`}>
-                                    {getStatusText(booking.status)}
-                                  </span>
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className={`text-xs font-bold px-2 py-1 rounded ${getStatusColor(booking.status)} text-background`}>
+                                      {getStatusText(booking.status)}
+                                    </span>
+                                    {isOnlineBooking(booking) ? (
+                                      <span className="flex items-center gap-1 text-[10px] text-cyan-600">
+                                        <Globe className="h-3 w-3" />
+                                        Dragica
+                                      </span>
+                                    ) : (
+                                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                        <UserPen className="h-3 w-3" />
+                                        Ručno
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                             ) : !blocked ? (
-                              <div className="h-full flex items-center text-muted-foreground/50">
-                                <Plus className="h-4 w-4 mr-2 opacity-0 group-hover:opacity-100" />
-                                <span className="text-sm">Slobodno</span>
+                              <div className="h-full flex items-center justify-between">
+                                <div className="flex items-center text-muted-foreground/50">
+                                  <Plus className="h-4 w-4 mr-2" />
+                                  <span className="text-sm">Slobodno</span>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openBlockDialogForSlot(slot.time)
+                                  }}
+                                  title="Blokiraj ovaj termin"
+                                >
+                                  <Ban className="h-4 w-4" />
+                                </Button>
                               </div>
                             ) : null}
                           </div>
@@ -782,6 +829,14 @@ function CalendarPageContent() {
                     <div className="flex items-center gap-2">
                       <span className="w-3 h-3 rounded-full bg-muted" />
                       <span className="text-muted-foreground">Blokirano</span>
+                    </div>
+                    <div className="flex items-center gap-2 border-l border-border pl-4">
+                      <Globe className="h-3 w-3 text-cyan-600" />
+                      <span className="text-muted-foreground">Dragica (online)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <UserPen className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-muted-foreground">Ručno zakazano</span>
                     </div>
                   </div>
                 </div>
@@ -849,6 +904,7 @@ function CalendarPageContent() {
                           <TableHead>Klijent</TableHead>
                           <TableHead>Usluga</TableHead>
                           <TableHead>Cena</TableHead>
+                          <TableHead>Izvor</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-right">Akcije</TableHead>
                         </TableRow>
@@ -876,6 +932,19 @@ function CalendarPageContent() {
                             </TableCell>
                             <TableCell className="text-primary font-medium">
                               {booking.service.price.toLocaleString('sr-RS')} RSD
+                            </TableCell>
+                            <TableCell>
+                              {isOnlineBooking(booking) ? (
+                                <span className="flex items-center gap-1 text-xs text-cyan-600">
+                                  <Globe className="h-3.5 w-3.5" />
+                                  Dragica
+                                </span>
+                              ) : (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <UserPen className="h-3.5 w-3.5" />
+                                  Ručno
+                                </span>
+                              )}
                             </TableCell>
                             <TableCell>
                               <Select
@@ -971,6 +1040,20 @@ function CalendarPageContent() {
                           <span className="font-bold text-primary">
                             {booking.service.price.toLocaleString('sr-RS')} RSD
                           </span>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-3">
+                          {isOnlineBooking(booking) ? (
+                            <span className="flex items-center gap-1 text-xs text-cyan-600">
+                              <Globe className="h-3.5 w-3.5" />
+                              Dragica (online)
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <UserPen className="h-3.5 w-3.5" />
+                              Ručno zakazano
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex gap-2 pt-2 border-t border-border">
@@ -1086,6 +1169,21 @@ function CalendarPageContent() {
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Cena</span>
                   <span className="font-bold text-primary">{selectedSlotBooking.service.price.toLocaleString('sr-RS')} RSD</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Izvor</span>
+                  {isOnlineBooking(selectedSlotBooking) ? (
+                    <span className="flex items-center gap-1.5 font-medium text-cyan-600">
+                      <Globe className="h-4 w-4" />
+                      Dragica (online)
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1.5 font-medium text-muted-foreground">
+                      <UserPen className="h-4 w-4" />
+                      Ručno zakazano
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-2">

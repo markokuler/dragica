@@ -37,7 +37,9 @@ export async function GET(request: NextRequest) {
       .limit(limit)
 
     if (upcoming) {
-      query = query.gte('start_datetime', new Date().toISOString())
+      const startOfToday = new Date()
+      startOfToday.setHours(0, 0, 0, 0)
+      query = query.gte('start_datetime', startOfToday.toISOString())
         .in('status', ['pending', 'confirmed'])
     }
 

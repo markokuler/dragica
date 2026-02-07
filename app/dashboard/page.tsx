@@ -237,7 +237,7 @@ export default function DashboardPage() {
                     <div className="text-3xl font-bold font-serif text-primary">{stats?.todayBookings || 0}</div>
                   </div>
                   <div className="flex items-baseline justify-between">
-                    <p className="text-base text-muted-foreground">Ove nedelje</p>
+                    <p className="text-base text-muted-foreground">7 dana</p>
                     <div className="text-3xl font-bold font-serif">{stats?.upcomingBookings || 0}</div>
                   </div>
                 </CardContent>
@@ -296,7 +296,7 @@ export default function DashboardPage() {
               <CardDescription>Naredna zakazivanja</CardDescription>
             </div>
             <Link href="/dashboard/kalendar">
-              <Button variant="ghost" size="sm" className="h-9">
+              <Button variant="outline" size="sm" className="h-9">
                 Svi termini
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
