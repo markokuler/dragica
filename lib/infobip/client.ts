@@ -1,11 +1,17 @@
 /**
  * Infobip client for sending WhatsApp and Viber messages
+ *
+ * Mock mode: when INFOBIP_API_KEY is not set or is 'mock',
+ * messages are logged to console instead of being sent.
+ * Set real credentials to send actual messages.
  */
 
 const INFOBIP_BASE_URL = process.env.INFOBIP_BASE_URL || ''
 const INFOBIP_API_KEY = process.env.INFOBIP_API_KEY || ''
 const INFOBIP_WHATSAPP_SENDER = process.env.INFOBIP_WHATSAPP_SENDER || ''
 const INFOBIP_VIBER_SENDER = process.env.INFOBIP_VIBER_SENDER || ''
+
+const IS_MOCK = !INFOBIP_API_KEY || INFOBIP_API_KEY === 'mock'
 
 export type NotificationChannel = 'whatsapp' | 'viber'
 
@@ -71,12 +77,19 @@ function formatPhoneNumber(phone: string): string {
  * Send WhatsApp message via Infobip using template
  */
 async function sendWhatsApp(to: string, message: string): Promise<boolean> {
-  if (!INFOBIP_BASE_URL || !INFOBIP_API_KEY || !INFOBIP_WHATSAPP_SENDER) {
+  const formattedPhone = formatPhoneNumber(to)
+
+  if (IS_MOCK) {
+    console.log('\n📱 [MOCK WhatsApp]', formattedPhone)
+    console.log('   Message:', message)
+    console.log('')
+    return true
+  }
+
+  if (!INFOBIP_BASE_URL || !INFOBIP_WHATSAPP_SENDER) {
     console.error('Infobip WhatsApp not configured')
     return false
   }
-
-  const formattedPhone = formatPhoneNumber(to)
 
   // Use template endpoint for WhatsApp Business API
   const requestBody = {
@@ -130,12 +143,19 @@ async function sendWhatsApp(to: string, message: string): Promise<boolean> {
  * Send Viber message via Infobip
  */
 async function sendViber(to: string, message: string): Promise<boolean> {
-  if (!INFOBIP_BASE_URL || !INFOBIP_API_KEY) {
+  const formattedPhone = formatPhoneNumber(to).replace('+', '')
+
+  if (IS_MOCK) {
+    console.log('\n💬 [MOCK Viber]', formattedPhone)
+    console.log('   Message:', message)
+    console.log('')
+    return true
+  }
+
+  if (!INFOBIP_BASE_URL) {
     console.error('Infobip not configured')
     return false
   }
-
-  const formattedPhone = formatPhoneNumber(to).replace('+', '')
 
   // Use IBSelfServe for testing, or custom sender for production
   const sender = INFOBIP_VIBER_SENDER || 'IBSelfServe'
@@ -285,6 +305,7 @@ Možete zakazati novi termin na našoj stranici.`
  * Check if Infobip is configured
  */
 export function isInfobipConfigured(): boolean {
+  if (IS_MOCK) return true
   return !!(INFOBIP_BASE_URL && INFOBIP_API_KEY && (INFOBIP_WHATSAPP_SENDER || INFOBIP_VIBER_SENDER))
 }
 

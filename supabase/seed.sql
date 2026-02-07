@@ -43,8 +43,96 @@ VALUES (
 -- =============================================
 -- ADMIN USER (super admin)
 -- =============================================
--- Note: This user needs to exist in auth.users first
--- For local dev, create via Supabase Studio or API
+-- Create admin in auth.users (local dev only)
+-- GoTrue requires all varchar/text columns to be '' not NULL
+INSERT INTO auth.users (
+  id, instance_id, email, encrypted_password, email_confirmed_at,
+  role, aud, raw_user_meta_data,
+  confirmation_token, recovery_token,
+  email_change, email_change_token_new, email_change_token_current,
+  phone_change, phone_change_token,
+  reauthentication_token,
+  created_at, updated_at
+)
+VALUES (
+  'ad000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000000',
+  'admin@dragica.local',
+  crypt('admin123', gen_salt('bf')),
+  NOW(),
+  'authenticated',
+  'authenticated',
+  '{"role": "admin"}'::jsonb,
+  '', '',
+  '', '', '',
+  '', '',
+  '',
+  NOW(),
+  NOW()
+);
+
+-- Also need identity record for email/password login to work
+INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+VALUES (
+  'ad000000-0000-0000-0000-000000000001',
+  'ad000000-0000-0000-0000-000000000001',
+  'admin@dragica.local',
+  jsonb_build_object('sub', 'ad000000-0000-0000-0000-000000000001', 'email', 'admin@dragica.local'),
+  'email',
+  NOW(),
+  NOW(),
+  NOW()
+);
+
+-- The trigger (20250209) auto-creates public.users from raw_user_meta_data
+-- But seed runs after migrations, so trigger should fire.
+-- Safety net: explicit insert with ON CONFLICT
+INSERT INTO users (id, email, role, tenant_id)
+VALUES ('ad000000-0000-0000-0000-000000000001', 'admin@dragica.local', 'admin', NULL)
+ON CONFLICT (id) DO NOTHING;
+
+-- Create test salon owner in auth
+INSERT INTO auth.users (
+  id, instance_id, email, encrypted_password, email_confirmed_at,
+  role, aud, raw_user_meta_data,
+  confirmation_token, recovery_token,
+  email_change, email_change_token_new, email_change_token_current,
+  phone_change, phone_change_token,
+  reauthentication_token,
+  created_at, updated_at
+)
+VALUES (
+  'ad000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000000',
+  'milana@test.local',
+  crypt('test1234', gen_salt('bf')),
+  NOW(),
+  'authenticated',
+  'authenticated',
+  jsonb_build_object('role', 'client', 'tenant_id', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'),
+  '', '',
+  '', '', '',
+  '', '',
+  '',
+  NOW(),
+  NOW()
+);
+
+INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+VALUES (
+  'ad000000-0000-0000-0000-000000000002',
+  'ad000000-0000-0000-0000-000000000002',
+  'milana@test.local',
+  jsonb_build_object('sub', 'ad000000-0000-0000-0000-000000000002', 'email', 'milana@test.local'),
+  'email',
+  NOW(),
+  NOW(),
+  NOW()
+);
+
+INSERT INTO users (id, email, role, tenant_id)
+VALUES ('ad000000-0000-0000-0000-000000000002', 'milana@test.local', 'client', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890')
+ON CONFLICT (id) DO NOTHING;
 
 -- =============================================
 -- SERVICES - Milana Nails
@@ -141,18 +229,153 @@ INSERT INTO blocked_slots (tenant_id, start_datetime, end_datetime, reason) VALU
 -- FINANCIAL ENTRIES - Milana Nails
 -- =============================================
 INSERT INTO financial_entries (tenant_id, type, category, amount, description, entry_date, created_at) VALUES
-  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'income', 'Usluge', 2000.00, 'Manikir - gel lak', NOW() - INTERVAL '7 days', NOW() - INTERVAL '7 days'),
-  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'income', 'Usluge', 3500.00, 'Manikir - gel nadogradnja', NOW() - INTERVAL '5 days', NOW() - INTERVAL '5 days'),
-  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'income', 'Usluge', 2000.00, 'Pedikir - klasičan', NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days'),
-  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'expense', 'Materijal', 5000.00, 'Gel lakovi - nabavka', NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'),
-  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'expense', 'Kirija', 30000.00, 'Mesečna kirija - Februar', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day'),
-  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'expense', 'Komunalije', 8000.00, 'Struja + voda', NOW() - INTERVAL '3 days', NOW() - INTERVAL '3 days');
+  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'income', 'booking', 2000.00, 'Manikir - gel lak', NOW() - INTERVAL '7 days', NOW() - INTERVAL '7 days'),
+  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'income', 'booking', 3500.00, 'Manikir - gel nadogradnja', NOW() - INTERVAL '5 days', NOW() - INTERVAL '5 days'),
+  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'income', 'booking', 2000.00, 'Pedikir - klasičan', NOW() - INTERVAL '2 days', NOW() - INTERVAL '2 days'),
+  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'expense', 'supplies', 5000.00, 'Gel lakovi - nabavka', NOW() - INTERVAL '10 days', NOW() - INTERVAL '10 days'),
+  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'expense', 'rent', 30000.00, 'Mesečna kirija - Februar', NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day'),
+  ('a1b2c3d4-e5f6-7890-abcd-ef1234567890', 'expense', 'utilities', 8000.00, 'Struja + voda', NOW() - INTERVAL '3 days', NOW() - INTERVAL '3 days');
+
+-- =============================================
+-- DEMO ACCOUNTS (for testing demo login locally)
+-- =============================================
+-- Demo tenant
+INSERT INTO tenants (id, slug, name, email, phone, subdomain, accent_color, description, is_active, is_demo, subscription_status, subscription_expires_at)
+VALUES (
+  'de000000-0000-0000-0000-000000000001',
+  'dragica-demo',
+  'Dragica Demo Salon',
+  'demo-salon@dragica.local',
+  '+381600000000',
+  'demo',
+  '#C17F59',
+  'Demo salon za isprobavanje Dragica platforme.',
+  true,
+  true,
+  'active',
+  (NOW() + INTERVAL '10 years')
+);
+
+-- Demo admin auth user
+INSERT INTO auth.users (
+  id, instance_id, email, encrypted_password, email_confirmed_at,
+  role, aud, raw_user_meta_data,
+  confirmation_token, recovery_token,
+  email_change, email_change_token_new, email_change_token_current,
+  phone_change, phone_change_token,
+  reauthentication_token,
+  created_at, updated_at
+)
+VALUES (
+  'de000000-0000-0000-0000-000000000010',
+  '00000000-0000-0000-0000-000000000000',
+  'demo-admin@dragica.local',
+  crypt('demo1234', gen_salt('bf')),
+  NOW(),
+  'authenticated',
+  'authenticated',
+  '{"role": "admin"}'::jsonb,
+  '', '',
+  '', '', '',
+  '', '',
+  '',
+  NOW(),
+  NOW()
+);
+
+INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+VALUES (
+  'de000000-0000-0000-0000-000000000010',
+  'de000000-0000-0000-0000-000000000010',
+  'demo-admin@dragica.local',
+  jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000010', 'email', 'demo-admin@dragica.local'),
+  'email',
+  NOW(),
+  NOW(),
+  NOW()
+);
+
+INSERT INTO users (id, email, role, tenant_id, is_demo)
+VALUES ('de000000-0000-0000-0000-000000000010', 'demo-admin@dragica.local', 'admin', NULL, true)
+ON CONFLICT (id) DO UPDATE SET is_demo = true;
+
+-- Demo salon owner auth user
+INSERT INTO auth.users (
+  id, instance_id, email, encrypted_password, email_confirmed_at,
+  role, aud, raw_user_meta_data,
+  confirmation_token, recovery_token,
+  email_change, email_change_token_new, email_change_token_current,
+  phone_change, phone_change_token,
+  reauthentication_token,
+  created_at, updated_at
+)
+VALUES (
+  'de000000-0000-0000-0000-000000000020',
+  '00000000-0000-0000-0000-000000000000',
+  'demo-salon@dragica.local',
+  crypt('demo1234', gen_salt('bf')),
+  NOW(),
+  'authenticated',
+  'authenticated',
+  jsonb_build_object('role', 'client', 'tenant_id', 'de000000-0000-0000-0000-000000000001'),
+  '', '',
+  '', '', '',
+  '', '',
+  '',
+  NOW(),
+  NOW()
+);
+
+INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+VALUES (
+  'de000000-0000-0000-0000-000000000020',
+  'de000000-0000-0000-0000-000000000020',
+  'demo-salon@dragica.local',
+  jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000020', 'email', 'demo-salon@dragica.local'),
+  'email',
+  NOW(),
+  NOW(),
+  NOW()
+);
+
+INSERT INTO users (id, email, role, tenant_id, is_demo)
+VALUES ('de000000-0000-0000-0000-000000000020', 'demo-salon@dragica.local', 'client', 'de000000-0000-0000-0000-000000000001', true)
+ON CONFLICT (id) DO UPDATE SET is_demo = true, tenant_id = 'de000000-0000-0000-0000-000000000001';
+
+-- Demo services
+INSERT INTO services (tenant_id, name, duration_minutes, price, is_active) VALUES
+  ('de000000-0000-0000-0000-000000000001', 'Manikir - klasičan', 45, 1500.00, true),
+  ('de000000-0000-0000-0000-000000000001', 'Manikir - gel lak', 60, 2000.00, true),
+  ('de000000-0000-0000-0000-000000000001', 'Manikir - gel nadogradnja', 90, 3500.00, true),
+  ('de000000-0000-0000-0000-000000000001', 'Pedikir - klasičan', 60, 2000.00, true),
+  ('de000000-0000-0000-0000-000000000001', 'Pedikir - spa', 90, 3000.00, true),
+  ('de000000-0000-0000-0000-000000000001', 'Nail art - po noktu', 15, 200.00, true),
+  ('de000000-0000-0000-0000-000000000001', 'Skidanje gela', 30, 800.00, true),
+  ('de000000-0000-0000-0000-000000000001', 'Manikir + Pedikir combo', 105, 3200.00, true);
+
+-- Demo working hours
+INSERT INTO working_hours (tenant_id, day_of_week, start_time, end_time, is_active) VALUES
+  ('de000000-0000-0000-0000-000000000001', 1, '09:00', '20:00', true),
+  ('de000000-0000-0000-0000-000000000001', 2, '09:00', '20:00', true),
+  ('de000000-0000-0000-0000-000000000001', 3, '09:00', '20:00', true),
+  ('de000000-0000-0000-0000-000000000001', 4, '09:00', '20:00', true),
+  ('de000000-0000-0000-0000-000000000001', 5, '09:00', '20:00', true),
+  ('de000000-0000-0000-0000-000000000001', 6, '10:00', '16:00', true);
+
+-- =============================================
+-- APP SETTINGS (global defaults)
+-- =============================================
+INSERT INTO app_settings (key, value) VALUES
+  ('global', '{"default_trial_days": 14, "default_working_hours_start": "09:00", "default_working_hours_end": "20:00", "default_slot_duration": 30, "max_booking_advance_days": 90, "reminder_hours_before": 24, "app_name": "Dragica", "support_email": "podrska@dragica.rs"}'::jsonb)
+ON CONFLICT (key) DO NOTHING;
 
 -- =============================================
 -- Summary
 -- =============================================
--- Test salons: 2 (milana-nails, lepota-salon)
--- Services: 7 + 6 = 13
+-- Users: admin@dragica.local (admin/admin123), milana@test.local (client/test1234)
+-- Demo: demo-admin@dragica.local (admin/demo1234), demo-salon@dragica.local (client/demo1234)
+-- Test salons: 2 (milana-nails, lepota-salon) + 1 demo (dragica-demo)
+-- Services: 7 + 6 + 8 = 21
 -- Customers: 5
 -- Bookings: 9 (mix of statuses)
 -- Blocked slots: 2

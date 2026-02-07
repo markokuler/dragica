@@ -31,6 +31,7 @@ export interface Database {
           subscription_status: string | null
           subscription_expires_at: string | null
           created_at: string
+          is_demo: boolean
           updated_at: string
         }
         Insert: {
@@ -53,6 +54,7 @@ export interface Database {
           admin_notes?: string | null
           subscription_status?: string | null
           subscription_expires_at?: string | null
+          is_demo?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -76,6 +78,7 @@ export interface Database {
           admin_notes?: string | null
           subscription_status?: string | null
           subscription_expires_at?: string | null
+          is_demo?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -86,6 +89,8 @@ export interface Database {
           email: string
           role: 'admin' | 'client'
           tenant_id: string | null
+          is_demo: boolean
+          full_name: string | null
           created_at: string
           updated_at: string
         }
@@ -94,6 +99,8 @@ export interface Database {
           email: string
           role: 'admin' | 'client'
           tenant_id?: string | null
+          is_demo?: boolean
+          full_name?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -102,6 +109,8 @@ export interface Database {
           email?: string
           role?: 'admin' | 'client'
           tenant_id?: string | null
+          is_demo?: boolean
+          full_name?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -196,6 +205,7 @@ export interface Database {
           tenant_id: string
           phone: string
           name: string | null
+          notes: string | null
           notification_channel: 'whatsapp' | 'viber' | null
           created_at: string
           updated_at: string
@@ -205,6 +215,7 @@ export interface Database {
           tenant_id: string
           phone: string
           name?: string | null
+          notes?: string | null
           notification_channel?: 'whatsapp' | 'viber' | null
           created_at?: string
           updated_at?: string
@@ -214,6 +225,7 @@ export interface Database {
           tenant_id?: string
           phone?: string
           name?: string | null
+          notes?: string | null
           notification_channel?: 'whatsapp' | 'viber' | null
           created_at?: string
           updated_at?: string
