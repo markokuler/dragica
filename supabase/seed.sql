@@ -4,7 +4,7 @@
 -- Run with: supabase db reset (applies migrations + seed)
 
 -- Clean existing data (in correct order due to FK constraints)
-TRUNCATE financial_entries, bookings, blocked_slots, customers, working_hours, services, users, tenants CASCADE;
+TRUNCATE admin_message_log, admin_message_templates, salon_tags, financial_entries, bookings, blocked_slots, customers, working_hours, services, users, tenants CASCADE;
 
 -- =============================================
 -- TEST SALON: Milana Nails
@@ -363,6 +363,28 @@ INSERT INTO working_hours (tenant_id, day_of_week, start_time, end_time, is_acti
   ('de000000-0000-0000-0000-000000000001', 6, '10:00', '16:00', true);
 
 -- =============================================
+-- SALON TAGS
+-- =============================================
+INSERT INTO salon_tags (name, color) VALUES
+  ('VIP klijent', '#B8860B'),
+  ('Novi salon', '#4CAF50'),
+  ('Problem', '#F44336'),
+  ('Redovan', '#2196F3'),
+  ('Preporuka', '#9C27B0'),
+  ('Probni', '#E67700');
+
+-- =============================================
+-- ADMIN MESSAGE TEMPLATES
+-- =============================================
+INSERT INTO admin_message_templates (trigger_type, channel, name, message_body) VALUES
+  ('subscription_expiring', 'whatsapp', 'Istek pretplate - WhatsApp', 'Poštovani {salon_name}, vaša pretplata ističe za {days_left} dana ({expiry_date}). Produžite na vreme da ne izgubite pristup.'),
+  ('subscription_expiring', 'viber', 'Istek pretplate - Viber', 'Poštovani {salon_name}, vaša pretplata ističe za {days_left} dana ({expiry_date}). Produžite na vreme da ne izgubite pristup.'),
+  ('inactivity', 'whatsapp', 'Neaktivnost - WhatsApp', 'Poštovani {salon_name}, primetili smo da niste koristili Dragica aplikaciju duže od 2 nedelje. Da li vam je potrebna pomoć?'),
+  ('inactivity', 'viber', 'Neaktivnost - Viber', 'Poštovani {salon_name}, primetili smo da niste koristili Dragica aplikaciju duže od 2 nedelje. Da li vam je potrebna pomoć?'),
+  ('welcome', 'whatsapp', 'Dobrodošlica - WhatsApp', 'Dobrodošli u Dragica! {salon_name}, vaš nalog je aktivan. Kontaktirajte nas za pomoć pri podešavanju.'),
+  ('welcome', 'viber', 'Dobrodošlica - Viber', 'Dobrodošli u Dragica! {salon_name}, vaš nalog je aktivan. Kontaktirajte nas za pomoć pri podešavanju.');
+
+-- =============================================
 -- APP SETTINGS (global defaults)
 -- =============================================
 INSERT INTO app_settings (key, value) VALUES
@@ -380,3 +402,5 @@ ON CONFLICT (key) DO NOTHING;
 -- Bookings: 9 (mix of statuses)
 -- Blocked slots: 2
 -- Financial entries: 6
+-- Salon tags: 6
+-- Message templates: 6 (3 triggers x 2 channels)

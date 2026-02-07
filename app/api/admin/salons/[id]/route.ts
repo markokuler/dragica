@@ -94,6 +94,10 @@ export async function PUT(
       updateData.admin_notes = body.admin_notes || null
     }
 
+    if (body.notification_channel !== undefined) {
+      updateData.notification_channel = body.notification_channel || null
+    }
+
     // Update salon
     const { data: salon, error: updateError } = await supabase
       .from('tenants')

@@ -72,6 +72,11 @@ import {
   StickyNote,
   Bell,
   X,
+  MessageCircle,
+  Send,
+  Heart,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react'
 
 interface Salon {
@@ -89,6 +94,28 @@ interface Salon {
   subscription_expires_at: string | null
   created_at: string
   admin_notes: string | null
+  notification_channel: 'whatsapp' | 'viber' | null
+}
+
+interface MessageLog {
+  id: string
+  channel: string
+  trigger_type: string | null
+  phone: string
+  message_text: string
+  status: string
+  error_message: string | null
+  sent_by: string | null
+  created_at: string
+}
+
+interface MessageTemplate {
+  id: string
+  trigger_type: string
+  channel: string
+  name: string
+  message_body: string
+  is_active: boolean
 }
 
 interface Payment {
@@ -192,6 +219,8 @@ function parseAdminNotes(raw: string | null): AdminNote[] {
 const CONTACT_TYPES = [
   { value: 'call', label: 'Poziv', icon: PhoneCall },
   { value: 'email', label: 'Email', icon: Mail },
+  { value: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { value: 'viber', label: 'Viber', icon: MessageCircle },
   { value: 'meeting', label: 'Sastanak', icon: Video },
   { value: 'note', label: 'Beleška', icon: StickyNote },
   { value: 'other', label: 'Ostalo', icon: MessageSquare },
@@ -220,6 +249,16 @@ export default function SalonBusinessPage() {
   const [availableTags, setAvailableTags] = useState<AvailableTag[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
   const [reminders, setReminders] = useState<Reminder[]>([])
+  const [messageLog, setMessageLog] = useState<MessageLog[]>([])
+  const [messageTemplates, setMessageTemplates] = useState<MessageTemplate[]>([])
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false)
+  const [messageChannel, setMessageChannel] = useState<'whatsapp' | 'viber'>('whatsapp')
+  const [messageText, setMessageText] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
+  const [contactFilter, setContactFilter] = useState('all')
+  const [showAllContacts, setShowAllContacts] = useState(false)
+  const [showAllMessages, setShowAllMessages] = useState(false)
+  const [showCompletedReminders, setShowCompletedReminders] = useState(false)
 
   // Notes
   const [adminNotesList, setAdminNotesList] = useState<AdminNote[]>([])
@@ -268,6 +307,8 @@ export default function SalonBusinessPage() {
     fetchAvailableTags()
     fetchContacts()
     fetchReminders()
+    fetchMessageLog()
+    fetchMessageTemplates()
   }, [salonId])
 
   const fetchSalon = async () => {
@@ -369,6 +410,86 @@ export default function SalonBusinessPage() {
       }
     } catch (error) {
       console.error('Error fetching reminders:', error)
+    }
+  }
+
+  const fetchMessageLog = async () => {
+    try {
+      const response = await fetch(`/api/admin/messaging/log?tenant_id=${salonId}`)
+      if (response.ok) {
+        const data = await response.json()
+        setMessageLog(data.messages || [])
+      }
+    } catch (error) {
+      console.error('Error fetching message log:', error)
+    }
+  }
+
+  const fetchMessageTemplates = async () => {
+    try {
+      const response = await fetch('/api/admin/messaging/templates')
+      if (response.ok) {
+        const data = await response.json()
+        setMessageTemplates(data.templates || [])
+      }
+    } catch (error) {
+      console.error('Error fetching templates:', error)
+    }
+  }
+
+  const applyTemplate = (template: MessageTemplate) => {
+    let text = template.message_body
+    if (salon) {
+      text = text.replaceAll('{salon_name}', salon.name)
+      if (salon.subscription_expires_at) {
+        const expiry = new Date(salon.subscription_expires_at)
+        text = text.replaceAll('{expiry_date}', expiry.toLocaleDateString('sr-RS'))
+        const daysLeft = Math.ceil((expiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+        text = text.replaceAll('{days_left}', daysLeft.toString())
+      }
+    }
+    setMessageText(text)
+  }
+
+  const handleSendMessage = async () => {
+    if (!messageText.trim()) return
+    setSendingMessage(true)
+    try {
+      const response = await fetch('/api/admin/messaging/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant_id: salonId,
+          channel: messageChannel,
+          message: messageText.trim(),
+        }),
+      })
+      if (response.ok) {
+        setMessageDialogOpen(false)
+        setMessageText('')
+        fetchMessageLog()
+        fetchContacts()
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Greška pri slanju')
+      }
+    } catch {
+      alert('Greška pri slanju poruke')
+    } finally {
+      setSendingMessage(false)
+    }
+  }
+
+  const updateNotificationChannel = async (channel: string) => {
+    try {
+      const response = await fetch(`/api/admin/salons/${salonId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notification_channel: channel || null }),
+      })
+      if (response.ok) fetchSalon()
+    } catch (error) {
+      console.error('Error updating notification channel:', error)
     }
   }
 
@@ -668,6 +789,26 @@ export default function SalonBusinessPage() {
     return { score, items }
   }
 
+  const getHealthScore = () => {
+    let score = 0
+    if (salon?.is_active) score += 15
+    if (subscriptionStatus.status === 'active') score += 25
+    else if (subscriptionStatus.status === 'expiring') score += 12
+    const days = getDaysSinceActivity()
+    if (days !== null && days <= 7) score += 25
+    else if (days !== null && days <= 14) score += 12
+    if ((stats?.engagement.onlineBookingRate || 0) > 20) score += 15
+    else if ((stats?.engagement.onlineBookingRate || 0) > 0) score += 7
+    if (contacts.length > 0) {
+      const daysSinceContact = Math.floor((new Date().getTime() - new Date(contacts[0].contact_date).getTime()) / (1000 * 60 * 60 * 24))
+      if (daysSinceContact <= 7) score += 10
+      else if (daysSinceContact <= 30) score += 5
+      if (contacts.length >= 5) score += 10
+      else if (contacts.length >= 2) score += 5
+    }
+    return score
+  }
+
   const unusedTags = availableTags.filter((at) => !tags.some((t) => t.tag_id === at.id))
 
   const getContactIcon = (type: string) => {
@@ -761,25 +902,53 @@ export default function SalonBusinessPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Zakazivanja (mesec)</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Zdravlje odnosa</CardTitle>
+            <Heart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.bookings.thisMonth || 0}</div>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              {bookingTrend.isUp ? <TrendingUp className="h-3 w-3 text-success" /> : <TrendingDown className="h-3 w-3 text-destructive" />}
-              {bookingTrend.trend}% vs prošli mesec
-            </p>
+            {(() => {
+              const score = getHealthScore()
+              const color = score >= 70 ? 'text-success' : score >= 40 ? 'text-warning' : 'text-destructive'
+              const bg = score >= 70 ? 'bg-success' : score >= 40 ? 'bg-warning' : 'bg-destructive'
+              return (
+                <>
+                  <div className={`text-2xl font-bold ${color}`}>{score}/100</div>
+                  <div className="w-full bg-secondary rounded-full h-1.5 mt-1">
+                    <div className={`rounded-full h-1.5 transition-all ${bg}`} style={{ width: `${score}%` }} />
+                  </div>
+                </>
+              )
+            })()}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Klijenti</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Sledeća akcija</CardTitle>
+            <Bell className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats?.clients.total || 0}</div>
-            <p className="text-xs text-muted-foreground">registrovanih</p>
+            {(() => {
+              const active = reminders.filter(r => !r.is_completed).sort((a, b) => new Date(a.reminder_date).getTime() - new Date(b.reminder_date).getTime())
+              const overdue = active.filter(r => new Date(r.reminder_date) < new Date())
+              if (overdue.length > 0) {
+                return (
+                  <>
+                    <div className="text-lg font-bold text-destructive">Zakasnelo</div>
+                    <p className="text-xs text-destructive truncate">{overdue[0].title}</p>
+                  </>
+                )
+              }
+              if (active.length > 0) {
+                const daysUntil = Math.ceil((new Date(active[0].reminder_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                return (
+                  <>
+                    <div className="text-lg font-bold">{daysUntil === 0 ? 'Danas' : `Za ${daysUntil} dana`}</div>
+                    <p className="text-xs text-muted-foreground truncate">{active[0].title}</p>
+                  </>
+                )
+              }
+              return <div className="text-lg font-bold text-muted-foreground">Nema</div>
+            })()}
           </CardContent>
         </Card>
         <Card>
@@ -1008,151 +1177,475 @@ export default function SalonBusinessPage() {
 
         {/* CRM Tab */}
         <TabsContent value="crm" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Tags */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  Tagovi
-                </CardTitle>
-                <CardDescription>Označi salon za lakše filtriranje</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  {tags.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nema tagova</p>
-                  ) : (
-                    tags.map((tag) => (
-                      <Badge key={tag.id} style={{ backgroundColor: tag.color }} className="text-white">
-                        {tag.name}
-                        <button onClick={() => removeTag(tag.tag_id)} className="ml-1 hover:text-white/70">
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))
-                  )}
-                </div>
-                {unusedTags.length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-2">Dodaj tag:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {unusedTags.map((tag) => (
-                        <button
-                          key={tag.id}
-                          onClick={() => addTag(tag.id)}
-                          className="px-2 py-1 text-xs rounded border border-dashed hover:bg-secondary transition-colors"
-                          style={{ borderColor: tag.color, color: tag.color }}
-                        >
-                          + {tag.name}
-                        </button>
-                      ))}
+          {/* Health Strip */}
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            {/* Zdravlje odnosa */}
+            <Card className="p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Heart className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Zdravlje odnosa</span>
+              </div>
+              {(() => {
+                const score = getHealthScore()
+                const color = score >= 70 ? 'text-success' : score >= 40 ? 'text-warning' : 'text-destructive'
+                return (
+                  <>
+                    <p className={`text-lg font-bold ${color}`}>{score}/100</p>
+                    <div className="w-full bg-secondary rounded-full h-1.5 mt-1">
+                      <div className={`rounded-full h-1.5 transition-all ${score >= 70 ? 'bg-success' : score >= 40 ? 'bg-warning' : 'bg-destructive'}`} style={{ width: `${score}%` }} />
                     </div>
-                  </div>
-                )}
-              </CardContent>
+                  </>
+                )
+              })()}
             </Card>
 
-            {/* Reminders */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Bell className="h-4 w-4" />
-                    Podsećanja
-                  </CardTitle>
-                  <CardDescription>Zakaži podsećanje za ovaj salon</CardDescription>
-                </div>
-                <Button size="sm" onClick={() => setReminderDialogOpen(true)}>
-                  <Plus className="h-4 w-4" />
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {reminders.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">Nema podsećanja</p>
-                ) : (
-                  <div className="space-y-2">
-                    {reminders.map((reminder) => {
-                      const isOverdue = new Date(reminder.reminder_date) < new Date() && !reminder.is_completed
-                      return (
-                        <div key={reminder.id} className={`flex items-center gap-3 p-2 rounded-lg ${isOverdue ? 'bg-destructive/10' : 'bg-secondary/30'}`}>
-                          <button onClick={() => toggleReminder(reminder)}>
-                            {reminder.is_completed ? (
-                              <CheckCircle2 className="h-5 w-5 text-success" />
-                            ) : (
-                              <div className={`h-5 w-5 rounded-full border-2 ${isOverdue ? 'border-destructive' : 'border-muted-foreground'}`} />
-                            )}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${reminder.is_completed ? 'line-through text-muted-foreground' : ''}`}>{reminder.title}</p>
-                            <p className={`text-xs ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>
-                              {new Date(reminder.reminder_date).toLocaleDateString('sr-RS')}
-                            </p>
-                          </div>
-                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteReminder(reminder.id)}>
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </CardContent>
+            {/* Pretplata */}
+            <Card className="p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Pretplata</span>
+              </div>
+              <p className={`text-lg font-bold ${subscriptionStatus.status === 'expired' ? 'text-destructive' : subscriptionStatus.status === 'expiring' ? 'text-warning' : 'text-success'}`}>
+                {subscriptionStatus.text}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {subscriptionStatus.daysLeft > 0 ? `još ${subscriptionStatus.daysLeft} dana` : subscriptionStatus.daysLeft < 0 ? `istekla pre ${Math.abs(subscriptionStatus.daysLeft)} dana` : 'Nema'}
+              </p>
+            </Card>
+
+            {/* Poslednji kontakt */}
+            <Card className="p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Poslednji kontakt</span>
+              </div>
+              {(() => {
+                if (contacts.length === 0) return <p className="text-lg font-bold text-muted-foreground">Nikad</p>
+                const last = contacts[0]
+                const daysSince = Math.floor((new Date().getTime() - new Date(last.contact_date).getTime()) / (1000 * 60 * 60 * 24))
+                return (
+                  <>
+                    <p className={`text-lg font-bold ${daysSince > 30 ? 'text-destructive' : daysSince > 14 ? 'text-warning' : ''}`}>
+                      {daysSince === 0 ? 'Danas' : `Pre ${daysSince} dana`}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {CONTACT_TYPES.find(ct => ct.value === last.contact_type)?.label || last.contact_type}
+                    </p>
+                  </>
+                )
+              })()}
+            </Card>
+
+            {/* Sledeća akcija */}
+            <Card className="p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Bell className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Sledeća akcija</span>
+              </div>
+              {(() => {
+                const active = reminders.filter(r => !r.is_completed).sort((a, b) => new Date(a.reminder_date).getTime() - new Date(b.reminder_date).getTime())
+                const overdue = active.filter(r => new Date(r.reminder_date) < new Date())
+                if (overdue.length > 0) {
+                  return (
+                    <>
+                      <p className="text-lg font-bold text-destructive">Zakasnelo</p>
+                      <p className="text-xs text-destructive truncate">{overdue[0].title}</p>
+                    </>
+                  )
+                }
+                if (active.length > 0) {
+                  const daysUntil = Math.ceil((new Date(active[0].reminder_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                  return (
+                    <>
+                      <p className="text-lg font-bold">{daysUntil === 0 ? 'Danas' : `Za ${daysUntil} dana`}</p>
+                      <p className="text-xs text-muted-foreground truncate">{active[0].title}</p>
+                    </>
+                  )
+                }
+                return <p className="text-lg font-bold text-muted-foreground">Nema</p>
+              })()}
             </Card>
           </div>
 
-          {/* Contact Timeline */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4" />
-                  Istorija kontakata
-                </CardTitle>
-                <CardDescription>Evidencija komunikacije sa salonom</CardDescription>
-              </div>
-              <Button onClick={() => setContactDialogOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Dodaj
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {contacts.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">Nema zabeleženih kontakata</p>
-              ) : (
-                <div className="relative">
-                  <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
-                  <div className="space-y-4">
-                    {contacts.map((contact) => {
-                      const Icon = getContactIcon(contact.contact_type)
-                      const typeLabel = CONTACT_TYPES.find((ct) => ct.value === contact.contact_type)?.label || contact.contact_type
+          {/* Two Column Layout */}
+          <div className="grid gap-4 md:grid-cols-12">
+            {/* LEFT COLUMN */}
+            <div className="md:col-span-5 space-y-4">
+              {/* Quick Actions */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Brze akcije</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-2">
+                    <a href={salon.phone ? `tel:${salon.phone}` : undefined} className={!salon.phone ? 'pointer-events-none opacity-50' : ''} onClick={() => { if (salon.phone) { setContactForm({ contact_type: 'call', description: '', contact_date: new Date().toISOString().split('T')[0] }); setContactDialogOpen(true) } }}>
+                      <Button variant="outline" size="sm" className="w-full justify-start gap-2" disabled={!salon.phone}>
+                        <PhoneCall className="h-4 w-4" />
+                        Pozovi
+                      </Button>
+                    </a>
+                    <a href={salon.email ? `mailto:${salon.email}` : undefined} className={!salon.email ? 'pointer-events-none opacity-50' : ''} onClick={() => { if (salon.email) { setContactForm({ contact_type: 'email', description: '', contact_date: new Date().toISOString().split('T')[0] }); setContactDialogOpen(true) } }}>
+                      <Button variant="outline" size="sm" className="w-full justify-start gap-2" disabled={!salon.email}>
+                        <Mail className="h-4 w-4" />
+                        Email
+                      </Button>
+                    </a>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`w-full justify-start gap-2 ${
+                        !salon.phone || salon.notification_channel === 'viber'
+                          ? 'opacity-40 pointer-events-none'
+                          : 'text-green-600 border-green-200 hover:bg-green-50'
+                      }`}
+                      disabled={!salon.phone || salon.notification_channel === 'viber'}
+                      onClick={() => { setMessageChannel('whatsapp'); setMessageText(''); setMessageDialogOpen(true) }}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      WhatsApp
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`w-full justify-start gap-2 ${
+                        !salon.phone || salon.notification_channel === 'whatsapp'
+                          ? 'opacity-40 pointer-events-none'
+                          : 'text-purple-600 border-purple-200 hover:bg-purple-50'
+                      }`}
+                      disabled={!salon.phone || salon.notification_channel === 'whatsapp'}
+                      onClick={() => { setMessageChannel('viber'); setMessageText(''); setMessageDialogOpen(true) }}
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                      Viber
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => { setContactForm({ contact_type: 'note', description: '', contact_date: new Date().toISOString().split('T')[0] }); setContactDialogOpen(true) }}>
+                      <StickyNote className="h-4 w-4" />
+                      Beleška
+                    </Button>
+                    <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={openPaymentDialog}>
+                      <CreditCard className="h-4 w-4" />
+                      Uplata
+                    </Button>
+                  </div>
+                  {/* Notification Channel - toggle chips */}
+                  <div className="flex items-center gap-1.5 mt-3 pt-2 border-t">
+                    <span className="text-[11px] text-muted-foreground mr-1">Kanal:</span>
+                    <button
+                      onClick={() => updateNotificationChannel(salon.notification_channel === 'whatsapp' ? '' : 'whatsapp')}
+                      className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                        salon.notification_channel === 'whatsapp'
+                          ? 'bg-green-100 border-green-300 text-green-700'
+                          : 'border-border text-muted-foreground hover:border-green-300'
+                      }`}
+                    >
+                      WA
+                    </button>
+                    <button
+                      onClick={() => updateNotificationChannel(salon.notification_channel === 'viber' ? '' : 'viber')}
+                      className={`px-2 py-0.5 text-[11px] rounded-full border transition-colors ${
+                        salon.notification_channel === 'viber'
+                          ? 'bg-purple-100 border-purple-300 text-purple-700'
+                          : 'border-border text-muted-foreground hover:border-purple-300'
+                      }`}
+                    >
+                      Viber
+                    </button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Tags */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Tag className="h-3.5 w-3.5" />
+                    Tagovi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {availableTags.map((tag) => {
+                      const assigned = tags.some(t => t.tag_id === tag.id)
                       return (
-                        <div key={contact.id} className="relative pl-10">
-                          <div className="absolute left-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
-                            <Icon className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                          <div className="bg-secondary/30 rounded-lg p-3">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-medium text-primary">{typeLabel}</span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(contact.contact_date).toLocaleDateString('sr-RS')}
-                                </span>
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => deleteContact(contact.id)}>
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            </div>
-                            <p className="text-sm">{contact.description}</p>
-                          </div>
-                        </div>
+                        <button
+                          key={tag.id}
+                          onClick={() => assigned ? removeTag(tag.id) : addTag(tag.id)}
+                          className={`px-3 py-1.5 text-xs font-medium rounded-full border-2 transition-all ${
+                            assigned
+                              ? 'text-white shadow-sm'
+                              : 'hover:shadow-sm'
+                          }`}
+                          style={assigned
+                            ? { backgroundColor: tag.color, borderColor: tag.color }
+                            : { borderColor: tag.color, backgroundColor: `${tag.color}18`, color: tag.color }
+                          }
+                        >
+                          {tag.name}
+                        </button>
                       )
                     })}
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+
+              {/* Revenue Summary */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <BarChart3 className="h-3.5 w-3.5" />
+                    Prihod od salona
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Ukupno uplaćeno:</span>
+                    <span className="text-sm font-bold">{totalPaid.toLocaleString('sr-RS')} RSD</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Broj uplata:</span>
+                    <span className="text-sm">{payments.length}</span>
+                  </div>
+                  {payments.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Poslednja:</span>
+                      <span className="text-sm">{new Date(payments[0].payment_date).toLocaleDateString('sr-RS')}</span>
+                    </div>
+                  )}
+                  {payments.length > 0 && payments[0].plan_name && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-muted-foreground">Plan:</span>
+                      <Badge variant="outline" className="text-xs">{payments[0].plan_name}</Badge>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+            </div>
+
+            {/* RIGHT COLUMN */}
+            <div className="md:col-span-7 space-y-4">
+              {/* Contact Timeline */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <div>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      Istorija komunikacije
+                    </CardTitle>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setContactDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {/* Filter chips */}
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {[
+                      { value: 'all', label: 'Svi' },
+                      { value: 'call', label: 'Pozivi' },
+                      { value: 'email', label: 'Email' },
+                      { value: 'whatsapp', label: 'WhatsApp' },
+                      { value: 'viber', label: 'Viber' },
+                      { value: 'note', label: 'Beleške' },
+                    ].map(f => (
+                      <button
+                        key={f.value}
+                        onClick={() => setContactFilter(f.value)}
+                        className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                          contactFilter === f.value
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                        }`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const filtered = contactFilter === 'all' ? contacts : contacts.filter(c => c.contact_type === contactFilter)
+                    const displayed = showAllContacts ? filtered : filtered.slice(0, 5)
+                    if (filtered.length === 0) {
+                      return <p className="text-sm text-muted-foreground text-center py-4">Nema kontakata</p>
+                    }
+                    return (
+                      <>
+                        <div className="relative">
+                          <div className="absolute left-3.5 top-0 bottom-0 w-px bg-border" />
+                          <div className="space-y-3">
+                            {displayed.map((contact) => {
+                              const Icon = getContactIcon(contact.contact_type)
+                              const typeLabel = CONTACT_TYPES.find((ct) => ct.value === contact.contact_type)?.label || contact.contact_type
+                              const isWhatsApp = contact.contact_type === 'whatsapp'
+                              const isViber = contact.contact_type === 'viber'
+                              return (
+                                <div key={contact.id} className="relative pl-9">
+                                  <div className={`absolute left-0 w-7 h-7 rounded-full flex items-center justify-center ${isWhatsApp ? 'bg-green-100' : isViber ? 'bg-purple-100' : 'bg-secondary'}`}>
+                                    <Icon className={`h-3.5 w-3.5 ${isWhatsApp ? 'text-green-600' : isViber ? 'text-purple-600' : 'text-muted-foreground'}`} />
+                                  </div>
+                                  <div className="bg-secondary/30 rounded-lg p-2.5">
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <span className={`text-xs font-medium ${isWhatsApp ? 'text-green-600' : isViber ? 'text-purple-600' : 'text-primary'}`}>{typeLabel}</span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[10px] text-muted-foreground">
+                                          {new Date(contact.contact_date).toLocaleDateString('sr-RS')}
+                                        </span>
+                                        <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100" onClick={() => deleteContact(contact.id)}>
+                                          <Trash2 className="h-2.5 w-2.5" />
+                                        </Button>
+                                      </div>
+                                    </div>
+                                    <p className="text-sm line-clamp-2">{contact.description}</p>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                        {filtered.length > 5 && (
+                          <button
+                            onClick={() => setShowAllContacts(!showAllContacts)}
+                            className="text-xs text-primary hover:underline w-full text-center pt-2 flex items-center justify-center gap-1"
+                          >
+                            {showAllContacts ? <><ChevronUp className="h-3 w-3" /> Prikaži manje</> : <><ChevronDown className="h-3 w-3" /> Prikaži sve ({filtered.length})</>}
+                          </button>
+                        )}
+                      </>
+                    )
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* Reminders */}
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-3">
+                  <div>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Bell className="h-3.5 w-3.5" />
+                      Podsećanja
+                      {(() => {
+                        const activeCount = reminders.filter(r => !r.is_completed).length
+                        if (activeCount > 0) return <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{activeCount}</Badge>
+                        return null
+                      })()}
+                    </CardTitle>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setReminderDialogOpen(true)}>
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </CardHeader>
+                <CardContent>
+                  {(() => {
+                    const active = reminders.filter(r => !r.is_completed).sort((a, b) => new Date(a.reminder_date).getTime() - new Date(b.reminder_date).getTime())
+                    const completed = reminders.filter(r => r.is_completed)
+                    if (active.length === 0 && completed.length === 0) {
+                      return <p className="text-sm text-muted-foreground text-center py-3">Nema podsećanja</p>
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {active.map((reminder) => {
+                          const isOverdue = new Date(reminder.reminder_date) < new Date()
+                          return (
+                            <div key={reminder.id} className={`flex items-center gap-2.5 p-2 rounded-lg ${isOverdue ? 'bg-destructive/10' : 'bg-secondary/30'}`}>
+                              <button onClick={() => toggleReminder(reminder)}>
+                                <div className={`h-4 w-4 rounded-full border-2 ${isOverdue ? 'border-destructive' : 'border-muted-foreground'}`} />
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{reminder.title}</p>
+                                <p className={`text-[10px] ${isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
+                                  {new Date(reminder.reminder_date).toLocaleDateString('sr-RS')}
+                                  {isOverdue && ' — zakasnelo'}
+                                </p>
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-5 w-5 flex-shrink-0" onClick={() => deleteReminder(reminder.id)}>
+                                <Trash2 className="h-2.5 w-2.5" />
+                              </Button>
+                            </div>
+                          )
+                        })}
+                        {completed.length > 0 && (
+                          <button
+                            onClick={() => setShowCompletedReminders(!showCompletedReminders)}
+                            className="text-xs text-muted-foreground hover:text-foreground w-full text-center pt-1 flex items-center justify-center gap-1"
+                          >
+                            {showCompletedReminders ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                            Završena ({completed.length})
+                          </button>
+                        )}
+                        {showCompletedReminders && completed.map((reminder) => (
+                          <div key={reminder.id} className="flex items-center gap-2.5 p-2 rounded-lg bg-secondary/20 opacity-60">
+                            <button onClick={() => toggleReminder(reminder)}>
+                              <CheckCircle2 className="h-4 w-4 text-success" />
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm line-through text-muted-foreground truncate">{reminder.title}</p>
+                              <p className="text-[10px] text-muted-foreground">{new Date(reminder.reminder_date).toLocaleDateString('sr-RS')}</p>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 flex-shrink-0" onClick={() => deleteReminder(reminder.id)}>
+                              <Trash2 className="h-2.5 w-2.5" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </CardContent>
+              </Card>
+
+              {/* Message Log */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Send className="h-3.5 w-3.5" />
+                    Poslate poruke
+                    {messageLog.length > 0 && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{messageLog.length}</Badge>}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {messageLog.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-3">Nema poslatih poruka</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(showAllMessages ? messageLog : messageLog.slice(0, 5)).map((msg) => (
+                        <div key={msg.id} className="flex items-start gap-2.5 p-2 rounded-lg bg-secondary/30">
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${msg.channel === 'whatsapp' ? 'bg-green-100' : 'bg-purple-100'}`}>
+                            <MessageCircle className={`h-3 w-3 ${msg.channel === 'whatsapp' ? 'text-green-600' : 'text-purple-600'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className={`text-[10px] font-medium ${msg.channel === 'whatsapp' ? 'text-green-600' : 'text-purple-600'}`}>
+                                {msg.channel === 'whatsapp' ? 'WhatsApp' : 'Viber'}
+                              </span>
+                              {msg.trigger_type && (
+                                <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5">auto</Badge>
+                              )}
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(msg.created_at).toLocaleDateString('sr-RS', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <Badge
+                                variant={msg.status === 'sent' ? 'default' : 'destructive'}
+                                className={`text-[9px] px-1 py-0 h-3.5 ${msg.status === 'sent' ? 'bg-success hover:bg-success' : ''}`}
+                              >
+                                {msg.status === 'sent' ? 'Poslato' : 'Greška'}
+                              </Badge>
+                            </div>
+                            <p className="text-xs line-clamp-2 text-muted-foreground">{msg.message_text}</p>
+                          </div>
+                        </div>
+                      ))}
+                      {messageLog.length > 5 && (
+                        <button
+                          onClick={() => setShowAllMessages(!showAllMessages)}
+                          className="text-xs text-primary hover:underline w-full text-center pt-1 flex items-center justify-center gap-1"
+                        >
+                          {showAllMessages ? <><ChevronUp className="h-3 w-3" /> Prikaži manje</> : <><ChevronDown className="h-3 w-3" /> Prikaži sve ({messageLog.length})</>}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Payments Tab */}
@@ -1507,6 +2000,64 @@ export default function SalonBusinessPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setReminderDialogOpen(false)}>Otkaži</Button>
             <Button onClick={handleSaveReminder} disabled={savingReminder || !reminderForm.title || !reminderForm.reminder_date}>{savingReminder ? 'Čuvanje...' : 'Sačuvaj'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Message Compose Dialog */}
+      <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className={`h-5 w-5 ${messageChannel === 'whatsapp' ? 'text-green-600' : 'text-purple-600'}`} />
+              {messageChannel === 'whatsapp' ? 'WhatsApp poruka' : 'Viber poruka'}
+            </DialogTitle>
+            <DialogDescription>Pošalji poruku salonu {salon.name} ({salon.phone})</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Template selector */}
+            {(() => {
+              const channelTemplates = messageTemplates.filter(t => t.channel === messageChannel && t.is_active)
+              if (channelTemplates.length === 0) return null
+              return (
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-2 block">Izaberi šablon:</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {channelTemplates.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => applyTemplate(t)}
+                        className="px-2.5 py-1.5 text-xs rounded-md border border-border hover:bg-secondary transition-colors text-left"
+                      >
+                        {t.name.replace(` - ${messageChannel === 'whatsapp' ? 'WhatsApp' : 'Viber'}`, '')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()}
+            <Textarea
+              value={messageText}
+              onChange={(e) => setMessageText(e.target.value)}
+              placeholder="Unesite poruku ili izaberite šablon iznad..."
+              rows={5}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMessageDialogOpen(false); setMessageText('') }}>Otkaži</Button>
+            <Button
+              onClick={handleSendMessage}
+              disabled={sendingMessage || !messageText.trim()}
+              className={messageChannel === 'whatsapp' ? 'bg-green-600 hover:bg-green-700' : 'bg-purple-600 hover:bg-purple-700'}
+            >
+              {sendingMessage ? 'Slanje...' : (
+                <>
+                  <Send className="h-4 w-4 mr-2" />
+                  Pošalji
+                </>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
