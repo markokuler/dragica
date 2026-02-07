@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
+import { recordPayment, PaymentError } from '@/lib/payments'
 
 export async function GET() {
   try {
@@ -77,95 +78,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Sva obavezna polja moraju biti popunjena' }, { status: 400 })
     }
 
-    const supabase = createAdminClient()
+    const result = await recordPayment({
+      tenantId: tenant_id,
+      planId: plan_id,
+      amount,
+      paymentDate: payment_date,
+      notes,
+      recordedBy: user.id,
+      isDemo: user.is_demo || false,
+    })
 
-    // Get the plan details
-    const { data: plan, error: planError } = await supabase
-      .from('subscription_plans')
-      .select('duration_days, name')
-      .eq('id', plan_id)
-      .single()
-
-    if (planError || !plan) {
-      return NextResponse.json({ error: 'Plan nije pronađen' }, { status: 400 })
-    }
-
-    // Get current tenant subscription
-    const { data: tenant, error: tenantError } = await supabase
-      .from('tenants')
-      .select('subscription_expires_at')
-      .eq('id', tenant_id)
-      .single()
-
-    if (tenantError || !tenant) {
-      return NextResponse.json({ error: 'Salon nije pronađen' }, { status: 400 })
-    }
-
-    // Calculate new expiration date
-    // If subscription is still valid, extend from expiration date
-    // If expired, start from payment date
-    const now = new Date()
-    const currentExpiry = tenant.subscription_expires_at ? new Date(tenant.subscription_expires_at) : now
-    const baseDate = currentExpiry > now ? currentExpiry : new Date(payment_date)
-    const newExpiry = new Date(baseDate)
-    newExpiry.setDate(newExpiry.getDate() + plan.duration_days)
-
-    // Record the payment
-    const { data: payment, error: paymentError } = await supabase
-      .from('payments')
-      .insert({
-        tenant_id,
-        plan_id,
-        amount: parseFloat(amount),
-        payment_date,
-        notes: notes || null,
-        recorded_by: user.id,
-      })
-      .select()
-      .single()
-
-    if (paymentError) {
-      console.error('Error recording payment:', paymentError)
-      return NextResponse.json({ error: 'Greška pri evidentiranju uplate' }, { status: 500 })
-    }
-
-    // Update or create tenant subscription
-    const { error: subError } = await supabase
-      .from('tenant_subscriptions')
-      .upsert({
-        tenant_id,
-        plan_id,
-        started_at: payment_date,
-        expires_at: newExpiry.toISOString(),
-        status: 'active',
-      }, {
-        onConflict: 'tenant_id',
-      })
-
-    if (subError) {
-      console.error('Error updating subscription:', subError)
-      // Don't fail - payment is recorded
-    }
-
-    // Update tenant subscription status and expiry
-    const { error: tenantUpdateError } = await supabase
-      .from('tenants')
-      .update({
-        subscription_status: 'active',
-        subscription_expires_at: newExpiry.toISOString(),
-      })
-      .eq('id', tenant_id)
-
-    if (tenantUpdateError) {
-      console.error('Error updating tenant:', tenantUpdateError)
-    }
-
-    return NextResponse.json({
-      payment,
-      new_expiry: newExpiry.toISOString(),
-      message: `Pretplata produžena do ${newExpiry.toLocaleDateString('sr-RS')}`
-    }, { status: 201 })
+    return NextResponse.json(result, { status: 201 })
   } catch (error) {
+    if (error instanceof PaymentError) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
     console.error('Error in POST /api/admin/payments:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
