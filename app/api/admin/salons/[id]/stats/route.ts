@@ -20,7 +20,6 @@ export async function GET(
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString()
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0).toISOString()
 
     // Get total bookings count
     const { count: totalBookings } = await supabase
@@ -33,15 +32,15 @@ export async function GET(
       .from('bookings')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', id)
-      .gte('booking_date', startOfMonth)
+      .gte('start_datetime', startOfMonth)
 
     // Get last month's bookings for comparison
     const { count: lastMonthBookings } = await supabase
       .from('bookings')
       .select('*', { count: 'exact', head: true })
       .eq('tenant_id', id)
-      .gte('booking_date', startOfLastMonth)
-      .lt('booking_date', startOfMonth)
+      .gte('start_datetime', startOfLastMonth)
+      .lt('start_datetime', startOfMonth)
 
     // Get completed bookings (revenue source)
     const { count: completedBookings } = await supabase
@@ -52,7 +51,7 @@ export async function GET(
 
     // Get unique clients count
     const { data: clientsData } = await supabase
-      .from('clients')
+      .from('customers')
       .select('id', { count: 'exact' })
       .eq('tenant_id', id)
 
@@ -74,10 +73,9 @@ export async function GET(
     // Get last booking
     const { data: lastBookingData } = await supabase
       .from('bookings')
-      .select('booking_date, booking_time')
+      .select('start_datetime')
       .eq('tenant_id', id)
-      .order('booking_date', { ascending: false })
-      .order('booking_time', { ascending: false })
+      .order('start_datetime', { ascending: false })
       .limit(1)
       .single()
 
@@ -135,7 +133,7 @@ export async function GET(
       `)
       .eq('tenant_id', id)
       .eq('status', 'completed')
-      .gte('booking_date', startOfMonth)
+      .gte('start_datetime', startOfMonth)
 
     let monthRevenue = 0
     if (monthRevenueData) {
@@ -147,12 +145,12 @@ export async function GET(
       })
     }
 
-    // Get owner's last login (from users table)
+    // Get owner's last activity (from users table)
     const { data: ownerData } = await supabase
       .from('users')
-      .select('last_login_at, created_at')
+      .select('created_at')
       .eq('tenant_id', id)
-      .eq('role', 'owner')
+      .eq('role', 'client')
       .single()
 
     // Get working hours count
@@ -171,8 +169,7 @@ export async function GET(
           completed: completedBookings || 0,
           byStatus: bookingsByStatus,
           lastBooking: lastBookingData ? {
-            date: lastBookingData.booking_date,
-            time: lastBookingData.booking_time,
+            date: lastBookingData.start_datetime,
           } : null,
         },
         clients: {
@@ -187,7 +184,6 @@ export async function GET(
           thisMonth: monthRevenue,
         },
         activity: {
-          ownerLastLogin: ownerData?.last_login_at || null,
           ownerCreatedAt: ownerData?.created_at || null,
           workingDays: workingDays || 0,
         },

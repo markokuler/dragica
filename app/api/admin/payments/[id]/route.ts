@@ -24,7 +24,7 @@ export async function PUT(
     if (body.plan_id !== undefined) updateData.plan_id = body.plan_id
 
     const { data: payment, error } = await supabase
-      .from('subscription_payments')
+      .from('payments')
       .update(updateData)
       .eq('id', id)
       .select()
@@ -56,7 +56,7 @@ export async function DELETE(
     const supabase = createAdminClient()
 
     const { error } = await supabase
-      .from('subscription_payments')
+      .from('payments')
       .delete()
       .eq('id', id)
 
