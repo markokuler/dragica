@@ -448,7 +448,7 @@ function ClientsPageContent() {
           </DialogHeader>
           {selectedClient && (
             <div className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Telefon</p>
                   <p className="font-mono text-lg">{selectedClient.phone}</p>
@@ -485,22 +485,24 @@ function ClientsPageContent() {
                     {selectedClient.bookings.map((booking) => (
                       <div
                         key={booking.id}
-                        className="flex items-center justify-between p-3 rounded-lg bg-secondary/50"
+                        className="p-3 rounded-lg bg-secondary/50"
                       >
-                        <div>
-                          <p className="font-medium">{booking.service.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {format(new Date(booking.start_datetime), 'd. MMM yyyy HH:mm', {
-                              locale: srLatn,
-                            })}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-medium text-primary">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">{booking.service.name}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {format(new Date(booking.start_datetime), 'd. MMM yyyy HH:mm', {
+                                locale: srLatn,
+                              })}
+                            </p>
+                          </div>
+                          <p className="font-medium text-primary flex-shrink-0">
                             {booking.service.price.toLocaleString('sr-RS')} RSD
                           </p>
+                        </div>
+                        <div className="mt-2">
                           <span
-                            className={`text-sm px-2.5 py-1 rounded-full font-medium ${
+                            className={`text-xs px-2.5 py-1 rounded-full font-medium ${
                               booking.status === 'completed'
                                 ? 'bg-status-completed/10 text-status-completed'
                                 : booking.status === 'confirmed'

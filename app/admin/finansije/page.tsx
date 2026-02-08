@@ -588,6 +588,7 @@ function AdminFinansijeContent() {
                   tick={{ fill: CHART_COLORS.label, fontSize: 12 }}
                   axisLine={{ stroke: CHART_COLORS.axis }}
                   tickLine={{ stroke: CHART_COLORS.axis }}
+                  interval={chartPeriod === 'days-30' ? 3 : chartPeriod === 'days-14' ? 1 : 0}
                 />
                 <YAxis
                   stroke={CHART_COLORS.axis}
@@ -727,7 +728,7 @@ function AdminFinansijeContent() {
               setCategoryFilter(v)
               updateFiltersUrl({ category: v })
             }}>
-              <SelectTrigger className="w-full sm:w-44 col-span-2 sm:col-span-1">
+              <SelectTrigger className="w-full sm:w-44">
                 <SelectValue placeholder="Kategorija" />
               </SelectTrigger>
               <SelectContent>

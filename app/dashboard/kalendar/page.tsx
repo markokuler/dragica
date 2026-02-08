@@ -921,30 +921,30 @@ function CalendarPageContent() {
                   </div>
 
                   {/* Legend */}
-                  <div className="flex flex-wrap gap-4 p-4 border-t border-border text-sm">
+                  <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-x-4 gap-y-2 p-4 border-t border-border text-sm">
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-status-pending" />
+                      <span className="w-3 h-3 rounded-full bg-status-pending flex-shrink-0" />
                       <span className="text-muted-foreground">Na čekanju</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-status-confirmed" />
+                      <span className="w-3 h-3 rounded-full bg-status-confirmed flex-shrink-0" />
                       <span className="text-muted-foreground">Potvrđeno</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-status-completed" />
+                      <span className="w-3 h-3 rounded-full bg-status-completed flex-shrink-0" />
                       <span className="text-muted-foreground">Završeno</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-muted" />
+                      <span className="w-3 h-3 rounded-full bg-muted flex-shrink-0" />
                       <span className="text-muted-foreground">Blokirano</span>
                     </div>
-                    <div className="flex items-center gap-2 border-l border-border pl-4">
-                      <Globe className="h-3 w-3 text-cyan-600" />
-                      <span className="text-muted-foreground">Dragica (online)</span>
+                    <div className="flex items-center gap-2 sm:border-l sm:border-border sm:pl-4">
+                      <Globe className="h-3 w-3 text-cyan-600 flex-shrink-0" />
+                      <span className="text-muted-foreground">Dragica</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <UserPen className="h-3 w-3 text-muted-foreground" />
-                      <span className="text-muted-foreground">Ručno zakazano</span>
+                      <UserPen className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                      <span className="text-muted-foreground">Ručno</span>
                     </div>
                   </div>
                 </div>
@@ -1630,7 +1630,7 @@ function CalendarPageContent() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleBlockSlot} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="block-start-date">Početni datum *</Label>
                 <Input
@@ -1653,7 +1653,7 @@ function CalendarPageContent() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="block-end-date">Krajnji datum *</Label>
                 <Input

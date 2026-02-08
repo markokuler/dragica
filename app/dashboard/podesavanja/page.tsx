@@ -699,15 +699,15 @@ function SettingsPageContent() {
                         ) : (
                           <div className="flex flex-wrap gap-1">
                             {hoursForDay.map((hour) => (
-                              <div key={hour.id} className="flex items-center gap-0.5 bg-secondary/50 rounded px-1.5 py-0.5">
+                              <div key={hour.id} className="flex items-center gap-1 bg-secondary/50 rounded px-2 py-1">
                                 <span className="text-xs font-mono text-primary">
                                   {hour.start_time}-{hour.end_time}
                                 </span>
-                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleEditHours(hour)}>
-                                  <Pencil className="h-3 w-3" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditHours(hour)}>
+                                  <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => handleDeleteHours(hour.id)}>
-                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDeleteHours(hour.id)}>
+                                  <Trash2 className="h-3.5 w-3.5 text-destructive" />
                                 </Button>
                               </div>
                             ))}
@@ -840,7 +840,7 @@ function SettingsPageContent() {
                       Tema boja
                     </h3>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                       {COLOR_THEMES.map((theme) => (
                         <div key={theme.name} className="space-y-2">
                           <p className="text-xs font-bold truncate">{theme.name}</p>
@@ -1087,7 +1087,7 @@ function SettingsPageContent() {
           </DialogHeader>
           <form onSubmit={handleBlockedSubmit}>
             <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Početni datum</Label>
                   <Input
@@ -1107,7 +1107,7 @@ function SettingsPageContent() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Krajnji datum</Label>
                   <Input

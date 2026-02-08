@@ -176,16 +176,16 @@ export default function AdminDashboard() {
                 <Link
                   key={reminder.id}
                   href={reminder.tenant_id ? `/admin/saloni/${reminder.tenant_id}` : '/admin/podsecanja'}
-                  className="flex items-center justify-between p-3 bg-info/10 rounded-lg hover:bg-info/20 transition-colors"
+                  className="flex items-center justify-between gap-2 p-3 bg-info/10 rounded-lg hover:bg-info/20 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <CalendarClock className="h-4 w-4 text-info" />
-                    <span className="font-medium">{reminder.title}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CalendarClock className="h-4 w-4 text-info flex-shrink-0" />
+                    <span className="font-medium truncate">{reminder.title}</span>
                     {reminder.salon_name && (
-                      <span className="text-sm text-muted-foreground">({reminder.salon_name})</span>
+                      <span className="text-sm text-muted-foreground truncate hidden sm:inline">({reminder.salon_name})</span>
                     )}
                   </div>
-                  <Badge variant="outline" className="text-info border-info">
+                  <Badge variant="outline" className="text-info border-info flex-shrink-0">
                     {new Date(reminder.reminder_date).toLocaleDateString('sr-RS')}
                   </Badge>
                 </Link>
@@ -195,13 +195,13 @@ export default function AdminDashboard() {
               {stats.expiredSubscriptions > 0 && (
                 <Link
                   href="/admin/saloni?status=expired"
-                  className="flex items-center justify-between p-3 bg-destructive/10 rounded-lg hover:bg-destructive/20 transition-colors"
+                  className="flex items-center justify-between gap-2 p-3 bg-destructive/10 rounded-lg hover:bg-destructive/20 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-destructive" />
-                    <span className="font-medium">Istekle pretplate</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Clock className="h-4 w-4 text-destructive flex-shrink-0" />
+                    <span className="font-medium truncate">Istekle pretplate</span>
                   </div>
-                  <Badge variant="destructive">{stats.expiredSubscriptions}</Badge>
+                  <Badge variant="destructive" className="flex-shrink-0">{stats.expiredSubscriptions}</Badge>
                 </Link>
               )}
 
@@ -209,13 +209,13 @@ export default function AdminDashboard() {
               {stats.expiringSubscriptions > 0 && (
                 <Link
                   href="/admin/saloni?status=expiring"
-                  className="flex items-center justify-between p-3 bg-warning/10 rounded-lg hover:bg-warning/20 transition-colors"
+                  className="flex items-center justify-between gap-2 p-3 bg-warning/10 rounded-lg hover:bg-warning/20 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-warning" />
-                    <span className="font-medium">Ističu za 7 dana</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />
+                    <span className="font-medium truncate">Ističu za 7 dana</span>
                   </div>
-                  <Badge className="bg-warning text-warning-foreground">{stats.expiringSubscriptions}</Badge>
+                  <Badge className="bg-warning text-warning-foreground flex-shrink-0">{stats.expiringSubscriptions}</Badge>
                 </Link>
               )}
 
@@ -223,13 +223,13 @@ export default function AdminDashboard() {
               {stats.dormantSalonsCount > 0 && (
                 <Link
                   href="/admin/saloni?status=dormant"
-                  className="flex items-center justify-between p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
+                  className="flex items-center justify-between gap-2 p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
                 >
-                  <div className="flex items-center gap-2">
-                    <ZapOff className="h-4 w-4 text-muted-foreground" />
-                    <span className="font-medium">Neaktivni saloni (30+ dana)</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ZapOff className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="font-medium truncate">Neaktivni saloni (30+ dana)</span>
                   </div>
-                  <Badge variant="secondary">{stats.dormantSalonsCount}</Badge>
+                  <Badge variant="secondary" className="flex-shrink-0">{stats.dormantSalonsCount}</Badge>
                 </Link>
               )}
             </div>
