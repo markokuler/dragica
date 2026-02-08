@@ -1386,8 +1386,8 @@ function CalendarPageContent() {
               </p>
             </div>
           ) : (
-            <form onSubmit={handleSaveBooking} className="space-y-4">
-              <div className="space-y-2">
+            <form onSubmit={handleSaveBooking} className="space-y-3 sm:space-y-4">
+              <div className="space-y-1.5">
                 <Label>Usluga *</Label>
                 <Select
                   value={bookingForm.service_id}
@@ -1407,7 +1407,7 @@ function CalendarPageContent() {
               </div>
 
               {!editingBooking && (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label>Pretraga klijenta</Label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1449,7 +1449,7 @@ function CalendarPageContent() {
                 </div>
               )}
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label>Telefon klijenta *</Label>
                 <div className="flex gap-2">
                   <div className="relative">
@@ -1500,7 +1500,7 @@ function CalendarPageContent() {
                 <p className="text-xs text-muted-foreground">Sa ili bez početne nule (060... ili 60...)</p>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="name">Ime klijenta (opciono)</Label>
                 <Input
                   id="name"
@@ -1510,7 +1510,7 @@ function CalendarPageContent() {
                 />
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="date">Datum *</Label>
                 <Input
                   id="date"
@@ -1521,8 +1521,8 @@ function CalendarPageContent() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                <div className="space-y-1.5">
                   <Label>Sat *</Label>
                   <Select
                     value={bookingForm.hour}
@@ -1556,7 +1556,7 @@ function CalendarPageContent() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label>Minuti *</Label>
                   <Select
                     value={bookingForm.minute}
@@ -1575,17 +1575,15 @@ function CalendarPageContent() {
               </div>
 
               {selectedService && (
-                <div className="p-4 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground">Rezime</p>
-                  <p className="font-medium">{selectedService.name}</p>
-                  <p className="text-sm">
-                    Trajanje: {selectedService.duration_minutes} min | Cena:{' '}
-                    {selectedService.price.toLocaleString('sr-RS')} RSD
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="font-medium text-sm">{selectedService.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedService.duration_minutes} min | {selectedService.price.toLocaleString('sr-RS')} RSD
                   </p>
                 </div>
               )}
 
-              <DialogFooter className="gap-2">
+              <DialogFooter className="gap-2 pt-1">
                 <Button type="button" variant="outline" onClick={() => setBookingDialogOpen(false)}>
                   Otkaži
                 </Button>
