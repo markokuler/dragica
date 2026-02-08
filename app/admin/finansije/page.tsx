@@ -38,6 +38,8 @@ import {
   DollarSign,
   ArrowUpRight,
   ArrowDownRight,
+  Globe,
+  UserPen,
   Trash2,
 } from 'lucide-react'
 import { format, startOfMonth, endOfMonth, subMonths, subDays, isSameDay, isSameMonth } from 'date-fns'
@@ -50,19 +52,25 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts'
 
-// Chart colors
+// Chart colors matching the design system
 const CHART_COLORS = {
-  income: '#6B9B7A',     // success/green
-  expense: '#B85C5C',    // destructive/red
+  income: '#18C6A0',      // success/teal - vibrant
+  expense: '#EF5050',     // error/red - vibrant
   axis: '#B0B7C3',
-  label: '#FAF9F6',
-  grid: '#3A5F5F',
+  label: '#FFFFFF',
+  grid: '#3D4556',
 }
 
-type ChartPeriod = 'days' | 'months'
+type ChartPeriod = 'days-7' | 'days-14' | 'days-30' | 'months'
+
+const PERIOD_OPTIONS: { value: ChartPeriod; label: string }[] = [
+  { value: 'days-7', label: '7 dana' },
+  { value: 'days-14', label: '14 dana' },
+  { value: 'days-30', label: '30 dana' },
+  { value: 'months', label: 'Po mesecima' },
+]
 
 interface FinancialEntry {
   id: string
@@ -112,6 +120,7 @@ function AdminFinansijeContent() {
   const [monthFilter, setMonthFilter] = useState(searchParams.get('month') || 'all')
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense'>((searchParams.get('type') as 'all' | 'income' | 'expense') || 'all')
   const [categoryFilter, setCategoryFilter] = useState(searchParams.get('category') || 'all')
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'auto' | 'manual'>((searchParams.get('source') as 'all' | 'auto' | 'manual') || 'all')
 
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -135,21 +144,24 @@ function AdminFinansijeContent() {
     month?: string
     type?: 'all' | 'income' | 'expense'
     category?: string
+    source?: 'all' | 'auto' | 'manual'
   }) => {
     const params = new URLSearchParams()
     const period = newFilters.period ?? chartPeriod
     const month = newFilters.month ?? monthFilter
     const type = newFilters.type ?? typeFilter
     const category = newFilters.category ?? categoryFilter
+    const source = newFilters.source ?? sourceFilter
 
     if (period !== 'months') params.set('period', period)
     if (month !== 'all') params.set('month', month)
     if (type !== 'all') params.set('type', type)
     if (category !== 'all') params.set('category', category)
+    if (source !== 'all') params.set('source', source)
 
     const queryString = params.toString()
     router.replace(queryString ? `${pathname}?${queryString}` : pathname, { scroll: false })
-  }, [router, pathname, chartPeriod, monthFilter, typeFilter, categoryFilter])
+  }, [router, pathname, chartPeriod, monthFilter, typeFilter, categoryFilter, sourceFilter])
 
   useEffect(() => {
     fetchEntries()
@@ -193,16 +205,21 @@ function AdminFinansijeContent() {
     return { todayStats, weekStats, monthStats, totalStats }
   }, [entries])
 
+  const isDaysView = chartPeriod.startsWith('days')
+
   // Prepare chart data
   const chartData = useMemo(() => {
     const now = new Date()
     const data: { name: string; fullName: string; income: number; expense: number; date: Date }[] = []
 
-    if (chartPeriod === 'days') {
-      for (let i = 13; i >= 0; i--) {
+    if (isDaysView) {
+      const dayCount = chartPeriod === 'days-7' ? 7 : chartPeriod === 'days-14' ? 14 : 30
+      for (let i = dayCount - 1; i >= 0; i--) {
         const date = subDays(now, i)
         data.push({
-          name: format(date, 'd. MMM', { locale: srLatn }),
+          name: dayCount <= 14
+            ? format(date, 'd. MMM', { locale: srLatn })
+            : format(date, 'd.', { locale: srLatn }),
           fullName: format(date, 'EEEE, d. MMMM yyyy', { locale: srLatn }),
           income: 0,
           expense: 0,
@@ -247,20 +264,13 @@ function AdminFinansijeContent() {
     }
 
     return data
-  }, [entries, chartPeriod])
+  }, [entries, chartPeriod, isDaysView])
 
   // Handle chart click
-  const handleChartClick = (data: { date: Date } | null) => {
+  const handleChartClick = (data: { name: string; date: Date } | null) => {
     if (data) {
-      if (chartPeriod === 'months') {
-        const monthStr = `${data.date.getFullYear()}-${String(data.date.getMonth() + 1).padStart(2, '0')}`
-        setMonthFilter(monthStr)
-        setSelectedChartDate(null)
-        updateFiltersUrl({ month: monthStr })
-      } else {
-        setSelectedChartDate(data.date)
-        setMonthFilter('all')
-      }
+      setSelectedChartDate(data.date)
+      setMonthFilter('all')
     }
   }
 
@@ -269,7 +279,7 @@ function AdminFinansijeContent() {
     let filtered = entries
 
     if (selectedChartDate) {
-      if (chartPeriod === 'days') {
+      if (isDaysView) {
         filtered = filtered.filter(e => isSameDay(new Date(e.entry_date), selectedChartDate))
       } else {
         filtered = filtered.filter(e => isSameMonth(new Date(e.entry_date), selectedChartDate))
@@ -292,8 +302,17 @@ function AdminFinansijeContent() {
       filtered = filtered.filter(e => e.category === categoryFilter)
     }
 
+    // Filter by source (auto = has payment_id, manual = no payment_id)
+    if (sourceFilter !== 'all') {
+      if (sourceFilter === 'auto') {
+        filtered = filtered.filter(e => e.payment_id !== null)
+      } else {
+        filtered = filtered.filter(e => e.payment_id === null)
+      }
+    }
+
     return filtered.sort((a, b) => new Date(b.entry_date).getTime() - new Date(a.entry_date).getTime())
-  }, [entries, selectedChartDate, chartPeriod, monthFilter, typeFilter, categoryFilter])
+  }, [entries, selectedChartDate, isDaysView, monthFilter, typeFilter, categoryFilter, sourceFilter])
 
   // Get available months for filter
   const availableMonths = useMemo(() => {
@@ -398,6 +417,7 @@ function AdminFinansijeContent() {
     setMonthFilter('all')
     setTypeFilter('all')
     setCategoryFilter('all')
+    setSourceFilter('all')
     setSelectedChartDate(null)
     router.replace(pathname, { scroll: false })
   }
@@ -505,11 +525,15 @@ function AdminFinansijeContent() {
           <div>
             <CardTitle>Pregled finansija</CardTitle>
             <CardDescription>
-              {chartPeriod === 'days' && 'Poslednjih 14 dana'}
+              {chartPeriod === 'days-7' && 'Poslednjih 7 dana'}
+              {chartPeriod === 'days-14' && 'Poslednjih 14 dana'}
+              {chartPeriod === 'days-30' && 'Poslednjih 30 dana'}
               {chartPeriod === 'months' && 'Poslednjih 6 meseci'}
-              {chartPeriod === 'days' && selectedChartDate && (
+              {selectedChartDate && (
                 <span className="ml-2 text-primary">
-                  • {format(selectedChartDate, 'd. MMM', { locale: srLatn })}
+                  • {isDaysView
+                    ? format(selectedChartDate, 'd. MMM', { locale: srLatn })
+                    : format(selectedChartDate, 'MMMM yyyy', { locale: srLatn })}
                 </span>
               )}
             </CardDescription>
@@ -523,12 +547,25 @@ function AdminFinansijeContent() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="days">Po danima</SelectItem>
-              <SelectItem value="months">Po mesecima</SelectItem>
+              {PERIOD_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </CardHeader>
         <CardContent className="p-2 sm:p-6 pt-0">
+          <div className="flex items-center justify-center gap-6 mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.income }} />
+              <span className="text-sm font-medium">Prihodi</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.expense }} />
+              <span className="text-sm font-medium">Rashodi</span>
+            </div>
+          </div>
           <div className="h-[250px] sm:h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -565,8 +602,8 @@ function AdminFinansijeContent() {
                       const data = payload[0].payload
                       return (
                         <div style={{
-                          backgroundColor: '#3A5F5F',
-                          border: '1px solid #2F4F4F',
+                          backgroundColor: '#1E2330',
+                          border: '1px solid #2E3545',
                           borderRadius: '8px',
                           padding: '12px',
                           color: CHART_COLORS.label,
@@ -584,20 +621,16 @@ function AdminFinansijeContent() {
                     return null
                   }}
                 />
-                <Legend
-                  wrapperStyle={{ color: CHART_COLORS.label }}
-                  formatter={(value) => (
-                    <span style={{ color: CHART_COLORS.label }}>
-                      {value === 'income' ? 'Prihodi' : 'Rashodi'}
-                    </span>
-                  )}
-                />
                 <Bar
                   dataKey="income"
                   name="income"
                   fill={CHART_COLORS.income}
                   radius={[4, 4, 0, 0]}
                   cursor="pointer"
+                  onClick={(data) => {
+                    const clickedData = chartData.find((d) => d.name === data.name)
+                    if (clickedData) handleChartClick(clickedData)
+                  }}
                 />
                 <Bar
                   dataKey="expense"
@@ -605,6 +638,10 @@ function AdminFinansijeContent() {
                   fill={CHART_COLORS.expense}
                   radius={[4, 4, 0, 0]}
                   cursor="pointer"
+                  onClick={(data) => {
+                    const clickedData = chartData.find((d) => d.name === data.name)
+                    if (clickedData) handleChartClick(clickedData)
+                  }}
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -620,12 +657,15 @@ function AdminFinansijeContent() {
               <CardTitle>Transakcije</CardTitle>
               <CardDescription>
                 {filteredEntries.length} unosa
-                {chartPeriod === 'days' && selectedChartDate && (
+                {selectedChartDate && (
                   <button
                     onClick={() => setSelectedChartDate(null)}
                     className="ml-2 text-primary hover:underline"
                   >
-                    (poništi filter)
+                    ({isDaysView
+                      ? format(selectedChartDate, 'd. MMM', { locale: srLatn })
+                      : format(selectedChartDate, 'MMMM yyyy', { locale: srLatn })}
+                    {' '}- poništi)
                   </button>
                 )}
               </CardDescription>
@@ -658,9 +698,11 @@ function AdminFinansijeContent() {
                     </SelectItem>
                   )
                 })}
-                {chartPeriod === 'days' && selectedChartDate && (
+                {selectedChartDate && (
                   <SelectItem value="chart" disabled>
-                    {format(selectedChartDate, 'd. MMM', { locale: srLatn })}
+                    {isDaysView
+                      ? format(selectedChartDate, 'd. MMM', { locale: srLatn })
+                      : format(selectedChartDate, 'MMMM yyyy', { locale: srLatn })}
                   </SelectItem>
                 )}
               </SelectContent>
@@ -717,7 +759,21 @@ function AdminFinansijeContent() {
               </SelectContent>
             </Select>
 
-            {(monthFilter !== 'all' || typeFilter !== 'all' || categoryFilter !== 'all' || selectedChartDate) && (
+            <Select value={sourceFilter} onValueChange={(v) => {
+              setSourceFilter(v as 'all' | 'auto' | 'manual')
+              updateFiltersUrl({ source: v as 'all' | 'auto' | 'manual' })
+            }}>
+              <SelectTrigger className="w-full sm:w-36">
+                <SelectValue placeholder="Izvor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Svi izvori</SelectItem>
+                <SelectItem value="auto">Automatski</SelectItem>
+                <SelectItem value="manual">Ručni unos</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {(monthFilter !== 'all' || typeFilter !== 'all' || categoryFilter !== 'all' || sourceFilter !== 'all' || selectedChartDate) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -754,9 +810,21 @@ function AdminFinansijeContent() {
                       {entry.description && (
                         <p className="text-xs sm:text-sm text-muted-foreground truncate">{entry.description}</p>
                       )}
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(entry.entry_date), 'd. MMM yyyy', { locale: srLatn })}
-                      </p>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>{format(new Date(entry.entry_date), 'd. MMM yyyy', { locale: srLatn })}</span>
+                        <span className="text-muted-foreground/30">·</span>
+                        {entry.payment_id ? (
+                          <span className="flex items-center gap-1 text-cyan-600">
+                            <Globe className="h-3 w-3" />
+                            <span className="text-xs">Automatski</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <UserPen className="h-3 w-3" />
+                            <span className="text-xs">Ručno</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <p
@@ -883,17 +951,16 @@ function AdminFinansijeContent() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Obriši unos?</AlertDialogTitle>
+            <AlertDialogTitle>Brisanje transakcije</AlertDialogTitle>
             <AlertDialogDescription>
-              Da li ste sigurni da želite da obrišete ovaj unos od{' '}
-              <strong>{formatCurrency(entryToDelete?.amount || 0)}</strong>?
-              <br /><br />
-              Ova akcija se ne može poništiti.
+              Da li ste sigurni da želite da obrišete {entryToDelete?.type === 'income' ? 'prihod' : 'rashod'} od{' '}
+              {formatCurrency(entryToDelete?.amount || 0)} ({entryToDelete ? (CATEGORY_LABELS[entryToDelete.category] || entryToDelete.category) : ''})?
+              {' '}Ova akcija se ne može poništiti.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setEntryToDelete(null)}>
-              Otkaži
+              Odustani
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
