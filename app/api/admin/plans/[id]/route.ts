@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(
   request: NextRequest,
@@ -35,6 +36,15 @@ export async function PUT(
       console.error('Error updating plan:', error)
       return NextResponse.json({ error: 'Greška pri ažuriranju plana' }, { status: 500 })
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'update',
+      entityType: 'plan',
+      entityId: id,
+      entityName: plan.name,
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ plan })
   } catch (error) {
@@ -78,6 +88,14 @@ export async function DELETE(
       console.error('Error deleting plan:', error)
       return NextResponse.json({ error: 'Greška pri brisanju plana' }, { status: 500 })
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'delete',
+      entityType: 'plan',
+      entityId: id,
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

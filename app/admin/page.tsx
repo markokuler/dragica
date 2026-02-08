@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
+import { PaymentDialog } from '@/components/payment-dialog'
 
 interface DashboardStats {
   totalSalons: number
@@ -85,21 +86,23 @@ interface DashboardStats {
 export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+
+  const fetchStats = async () => {
+    try {
+      const response = await fetch('/api/admin/stats')
+      if (response.ok) {
+        const data = await response.json()
+        setStats(data)
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await fetch('/api/admin/stats')
-        if (response.ok) {
-          const data = await response.json()
-          setStats(data)
-        }
-      } catch (error) {
-        console.error('Error fetching stats:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
     fetchStats()
   }, [])
 
@@ -508,12 +511,10 @@ export default function AdminDashboard() {
               </Button>
             </Link>
 
-            <Link href="/admin/finansije">
-              <Button variant="outline" className="w-full h-16 flex-col gap-1">
-                <CreditCard className="h-5 w-5 text-success" />
-                <span className="text-xs">Evidentiraj uplatu</span>
-              </Button>
-            </Link>
+            <Button variant="outline" className="w-full h-16 flex-col gap-1" onClick={() => setPaymentDialogOpen(true)}>
+              <CreditCard className="h-5 w-5 text-success" />
+              <span className="text-xs">Evidentiraj uplatu</span>
+            </Button>
 
             <Link href="/admin/izvestaji">
               <Button variant="outline" className="w-full h-16 flex-col gap-1">
@@ -531,6 +532,13 @@ export default function AdminDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Payment Dialog */}
+      <PaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        onSuccess={fetchStats}
+      />
     </div>
   )
 }

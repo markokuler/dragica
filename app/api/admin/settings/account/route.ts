@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function GET() {
   try {
@@ -69,6 +70,15 @@ export async function PUT(request: NextRequest) {
         // Don't fail the request, just log
       }
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'update',
+      entityType: 'settings',
+      entityName: 'Ažuriranje naloga',
+      details: { email, name },
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

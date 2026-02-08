@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUserWithRole } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 import { cookies } from 'next/headers'
 
 const IMPERSONATE_COOKIE = 'impersonate_tenant'
@@ -41,6 +42,15 @@ export async function POST(request: NextRequest) {
       sameSite: 'lax',
       maxAge: 60 * 60 * 4, // 4 hours
       path: '/',
+    })
+
+    await logAudit({
+      userId: userData.id,
+      action: 'impersonate',
+      entityType: 'salon',
+      entityId: tenant.id,
+      entityName: tenant.name,
+      isDemo: userData.is_demo,
     })
 
     return NextResponse.json({

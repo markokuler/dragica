@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUserWithRole } from '@/lib/auth'
 import { recordPayment, PaymentError } from '@/lib/payments'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(
   request: NextRequest,
@@ -78,6 +79,16 @@ export async function PUT(
     // Recalculate subscription expiry from all payments
     await recalculateSubscription(supabase, id)
 
+    await logAudit({
+      userId: userData.id,
+      action: 'update',
+      entityType: 'payment',
+      entityId: payment_id,
+      entityName: `${tenant?.name || 'Salon'} — ${plan?.name || 'Plan'}`,
+      details: { tenant_id: id, amount: parsedAmount, payment_date },
+      isDemo: userData.is_demo,
+    })
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error in PUT /api/admin/salons/[id]/payments:', error)
@@ -136,6 +147,15 @@ export async function DELETE(
 
     // Recalculate subscription expiry
     await recalculateSubscription(supabase, id)
+
+    await logAudit({
+      userId: userData.id,
+      action: 'delete',
+      entityType: 'payment',
+      entityId: paymentId,
+      details: { tenant_id: id },
+      isDemo: userData.is_demo,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -261,7 +281,7 @@ export async function POST(
     }
 
     const body = await request.json()
-    const { plan_id, amount, payment_date, notes } = body
+    const { plan_id, amount, payment_date, notes, coupon_id } = body
 
     if (!plan_id || !amount || !payment_date) {
       return NextResponse.json({ error: 'Sva obavezna polja moraju biti popunjena' }, { status: 400 })
@@ -275,6 +295,17 @@ export async function POST(
       notes,
       recordedBy: userData.id,
       isDemo: userData.is_demo || false,
+      couponId: coupon_id || null,
+    })
+
+    await logAudit({
+      userId: userData.id,
+      action: 'payment',
+      entityType: 'payment',
+      entityId: result.payment?.id as string,
+      entityName: `Uplata ${amount} RSD`,
+      details: { tenant_id: id, plan_id, amount },
+      isDemo: userData.is_demo,
     })
 
     return NextResponse.json(result, { status: 201 })

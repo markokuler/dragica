@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin, getDemoTenantIds } from '@/lib/auth'
 import { recordPayment, PaymentError } from '@/lib/payments'
+import { logAudit } from '@/lib/audit'
 
 export async function GET() {
   try {
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { tenant_id, plan_id, amount, payment_date, notes } = body
+    const { tenant_id, plan_id, amount, payment_date, notes, coupon_id } = body
 
     if (!tenant_id || !plan_id || !amount || !payment_date) {
       return NextResponse.json({ error: 'Sva obavezna polja moraju biti popunjena' }, { status: 400 })
@@ -86,6 +87,17 @@ export async function POST(request: NextRequest) {
       notes,
       recordedBy: user.id,
       isDemo: user.is_demo || false,
+      couponId: coupon_id || null,
+    })
+
+    await logAudit({
+      userId: user.id,
+      action: 'payment',
+      entityType: 'payment',
+      entityId: result.payment?.id as string,
+      entityName: `Uplata ${amount} RSD`,
+      details: { tenant_id, plan_id, amount },
+      isDemo: user.is_demo,
     })
 
     return NextResponse.json(result, { status: 201 })

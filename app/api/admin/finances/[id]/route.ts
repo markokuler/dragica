@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(
   request: NextRequest,
@@ -38,6 +39,15 @@ export async function PUT(
       return NextResponse.json({ error: 'Greška pri ažuriranju unosa' }, { status: 500 })
     }
 
+    await logAudit({
+      userId: user.id,
+      action: 'update',
+      entityType: 'finance',
+      entityId: id,
+      entityName: entry.description || `${entry.type} — ${entry.category}`,
+      isDemo: user.is_demo,
+    })
+
     return NextResponse.json({ entry })
   } catch (error) {
     console.error('Error in PUT /api/admin/finances/[id]:', error)
@@ -67,6 +77,14 @@ export async function DELETE(
       console.error('Error deleting admin finance entry:', error)
       return NextResponse.json({ error: 'Greška pri brisanju unosa' }, { status: 500 })
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'delete',
+      entityType: 'finance',
+      entityId: id,
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

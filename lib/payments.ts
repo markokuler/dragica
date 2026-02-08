@@ -8,6 +8,7 @@ interface RecordPaymentParams {
   notes?: string | null
   recordedBy: string
   isDemo?: boolean
+  couponId?: string | null
 }
 
 interface RecordPaymentResult {
@@ -17,7 +18,7 @@ interface RecordPaymentResult {
 }
 
 export async function recordPayment(params: RecordPaymentParams): Promise<RecordPaymentResult> {
-  const { tenantId, planId, amount, paymentDate, notes, recordedBy, isDemo } = params
+  const { tenantId, planId, amount, paymentDate, notes, recordedBy, isDemo, couponId } = params
   const supabase = createAdminClient()
 
   // Get the plan details
@@ -42,6 +43,46 @@ export async function recordPayment(params: RecordPaymentParams): Promise<Record
     throw new PaymentError('Salon nije pronađen', 400)
   }
 
+  // Validate coupon if provided
+  let couponCode: string | null = null
+  let originalAmount: number | null = null
+  const parsedAmount = parseFloat(String(amount))
+
+  if (couponId) {
+    const { data: coupon, error: couponError } = await supabase
+      .from('coupons')
+      .select('*')
+      .eq('id', couponId)
+      .single()
+
+    if (couponError || !coupon) {
+      throw new PaymentError('Kupon nije pronađen', 400)
+    }
+
+    if (!coupon.is_active) {
+      throw new PaymentError('Kupon nije aktivan', 400)
+    }
+
+    if (coupon.valid_until && new Date(coupon.valid_until) < new Date()) {
+      throw new PaymentError('Kupon je istekao', 400)
+    }
+
+    // Check usage count
+    if (coupon.max_uses) {
+      const { count } = await supabase
+        .from('payments')
+        .select('*', { count: 'exact', head: true })
+        .eq('coupon_id', couponId)
+
+      if ((count || 0) >= coupon.max_uses) {
+        throw new PaymentError('Kupon je dostigao maksimalan broj korišćenja', 400)
+      }
+    }
+
+    couponCode = coupon.code
+    originalAmount = parsedAmount
+  }
+
   // Calculate new expiration date
   const now = new Date()
   const currentExpiry = tenant.subscription_expires_at ? new Date(tenant.subscription_expires_at) : now
@@ -55,10 +96,12 @@ export async function recordPayment(params: RecordPaymentParams): Promise<Record
     .insert({
       tenant_id: tenantId,
       plan_id: planId,
-      amount: parseFloat(String(amount)),
+      amount: parsedAmount,
       payment_date: paymentDate,
       notes: notes || null,
       recorded_by: recordedBy,
+      coupon_id: couponId || null,
+      original_amount: originalAmount,
     })
     .select()
     .single()
@@ -91,15 +134,18 @@ export async function recordPayment(params: RecordPaymentParams): Promise<Record
     .eq('id', tenantId)
 
   // 4. Auto-create admin financial entry (subscription income)
-  const parsedAmount = parseFloat(String(amount))
   if (parsedAmount > 0) {
+    const description = couponCode
+      ? `${tenant.name} — ${plan.name} (kupon ${couponCode})`
+      : `${tenant.name} — ${plan.name}`
+
     await supabase
       .from('admin_financial_entries')
       .insert({
         type: 'income',
         category: 'subscriptions',
         amount: parsedAmount,
-        description: `${tenant.name} — ${plan.name}`,
+        description,
         entry_date: paymentDate,
         payment_id: payment.id,
         is_demo: isDemo || false,

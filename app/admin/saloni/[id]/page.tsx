@@ -79,6 +79,7 @@ import {
   ChevronUp,
   Pencil,
 } from 'lucide-react'
+import { PaymentDialog } from '@/components/payment-dialog'
 
 interface Salon {
   id: string
@@ -277,6 +278,7 @@ export default function SalonBusinessPage() {
   const [newNoteLevel, setNewNoteLevel] = useState<AdminNote['level']>('info')
 
   // Payment dialog
+  const [newPaymentDialogOpen, setNewPaymentDialogOpen] = useState(false)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
   const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null)
@@ -606,14 +608,7 @@ export default function SalonBusinessPage() {
 
   // Payment
   const openPaymentDialog = () => {
-    setEditingPayment(null)
-    setPaymentForm({
-      plan_id: plans[0]?.id || '',
-      amount: plans[0]?.price?.toString() || '',
-      payment_date: new Date().toISOString().split('T')[0],
-      notes: '',
-    })
-    setPaymentDialogOpen(true)
+    setNewPaymentDialogOpen(true)
   }
 
   const openEditPayment = (payment: Payment) => {
@@ -627,27 +622,23 @@ export default function SalonBusinessPage() {
     setPaymentDialogOpen(true)
   }
 
-  const handlePlanChange = (planId: string) => {
+  const handleEditPlanChange = (planId: string) => {
     const plan = plans.find((p) => p.id === planId)
     setPaymentForm({
       ...paymentForm,
       plan_id: planId,
-      amount: plan?.price?.toString() || paymentForm.amount,
+      amount: plan ? plan.price.toString() : paymentForm.amount,
     })
   }
 
   const handleSavePayment = async () => {
-    if (!paymentForm.plan_id || !paymentForm.amount || !paymentForm.payment_date) return
+    if (!editingPayment || !paymentForm.plan_id || !paymentForm.amount || !paymentForm.payment_date) return
     setSavingPayment(true)
     try {
-      const method = editingPayment ? 'PUT' : 'POST'
-      const body = editingPayment
-        ? { payment_id: editingPayment.id, ...paymentForm }
-        : paymentForm
       const response = await fetch(`/api/admin/salons/${salonId}/payments`, {
-        method,
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ payment_id: editingPayment.id, ...paymentForm }),
       })
       if (response.ok) {
         setPaymentDialogOpen(false)
@@ -1987,14 +1978,22 @@ export default function SalonBusinessPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Payment Dialog */}
+      {/* New Payment Dialog */}
+      <PaymentDialog
+        open={newPaymentDialogOpen}
+        onOpenChange={setNewPaymentDialogOpen}
+        salon={{ id: salon.id, name: salon.name }}
+        onSuccess={() => { fetchPayments(); fetchSalon() }}
+      />
+
+      {/* Edit Payment Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={(open) => { setPaymentDialogOpen(open); if (!open) setEditingPayment(null) }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{editingPayment ? 'Izmeni uplatu' : 'Evidentiraj uplatu'}</DialogTitle><DialogDescription>{editingPayment ? 'Izmenite detalje uplate' : `Unesi detalje uplate za ${salon.name}`}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Izmeni uplatu</DialogTitle><DialogDescription>Izmenite detalje uplate</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Plan *</Label>
-              <Select value={paymentForm.plan_id} onValueChange={handlePlanChange}>
+              <Select value={paymentForm.plan_id} onValueChange={handleEditPlanChange}>
                 <SelectTrigger><SelectValue placeholder="Izaberi plan" /></SelectTrigger>
                 <SelectContent>
                   {plans.map((plan) => (
@@ -2020,7 +2019,7 @@ export default function SalonBusinessPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Otkaži</Button>
-            <Button onClick={handleSavePayment} disabled={savingPayment || !paymentForm.plan_id || !paymentForm.amount}>{savingPayment ? 'Čuvanje...' : editingPayment ? 'Sačuvaj izmene' : 'Evidentiraj'}</Button>
+            <Button onClick={handleSavePayment} disabled={savingPayment || !paymentForm.plan_id || !paymentForm.amount}>{savingPayment ? 'Čuvanje...' : 'Sačuvaj izmene'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

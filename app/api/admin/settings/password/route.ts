@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient } from '@/lib/supabase/server'
 import { requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function PUT(request: NextRequest) {
   try {
@@ -42,6 +43,14 @@ export async function PUT(request: NextRequest) {
       console.error('Error updating password:', updateError)
       return NextResponse.json({ error: 'Greška pri promeni lozinke' }, { status: 500 })
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'update',
+      entityType: 'settings',
+      entityName: 'Promena lozinke',
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUserWithRole } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function GET(
   request: NextRequest,
@@ -114,6 +115,16 @@ export async function PUT(
       )
     }
 
+    await logAudit({
+      userId: userData.id,
+      action: 'update',
+      entityType: 'salon',
+      entityId: id,
+      entityName: salon.name,
+      details: updateData,
+      isDemo: userData.is_demo,
+    })
+
     return NextResponse.json({ salon })
   } catch (error) {
     console.error('Error in PUT /api/admin/salons/[id]:', error)
@@ -138,7 +149,7 @@ export async function DELETE(
     // Verify salon exists
     const { data: existingSalon, error: checkError } = await supabase
       .from('tenants')
-      .select('id')
+      .select('id, name')
       .eq('id', id)
       .single()
 
@@ -187,6 +198,15 @@ export async function DELETE(
         { status: 500 }
       )
     }
+
+    await logAudit({
+      userId: userData.id,
+      action: 'delete',
+      entityType: 'salon',
+      entityId: id,
+      entityName: existingSalon.name,
+      isDemo: userData.is_demo,
+    })
 
     return NextResponse.json({ success: true })
   } catch (error) {

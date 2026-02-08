@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function GET() {
   try {
@@ -70,6 +71,16 @@ export async function POST(request: NextRequest) {
       console.error('Error creating admin finance entry:', error)
       return NextResponse.json({ error: 'Greška pri kreiranju unosa' }, { status: 500 })
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'create',
+      entityType: 'finance',
+      entityId: entry.id,
+      entityName: `${type} — ${category} — ${amount} RSD`,
+      details: { type, category, amount, entry_date },
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ entry }, { status: 201 })
   } catch (error) {

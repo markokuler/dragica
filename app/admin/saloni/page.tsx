@@ -60,6 +60,7 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { srLatn } from 'date-fns/locale/sr-Latn'
+import { PaymentDialog } from '@/components/payment-dialog'
 
 interface Salon {
   id: string
@@ -74,18 +75,9 @@ interface Salon {
   created_at: string
 }
 
-interface Plan {
-  id: string
-  name: string
-  duration_days: number
-  price: number
-  is_trial: boolean
-}
-
 export default function SaloniPage() {
   const router = useRouter()
   const [salons, setSalons] = useState<Salon[]>([])
-  const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -99,13 +91,6 @@ export default function SaloniPage() {
   // Payment dialog
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [selectedSalon, setSelectedSalon] = useState<Salon | null>(null)
-  const [paymentForm, setPaymentForm] = useState({
-    plan_id: '',
-    amount: '',
-    payment_date: format(new Date(), 'yyyy-MM-dd'),
-    notes: '',
-  })
-  const [submitting, setSubmitting] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
   // New salon dialog
@@ -128,19 +113,10 @@ export default function SaloniPage() {
 
   const fetchData = async () => {
     try {
-      const [salonsRes, plansRes] = await Promise.all([
-        fetch('/api/admin/salons'),
-        fetch('/api/admin/plans'),
-      ])
-
+      const salonsRes = await fetch('/api/admin/salons')
       if (salonsRes.ok) {
         const data = await salonsRes.json()
         setSalons(data.salons || [])
-      }
-
-      if (plansRes.ok) {
-        const data = await plansRes.json()
-        setPlans(data.plans || [])
       }
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -366,54 +342,7 @@ export default function SaloniPage() {
 
   const openPaymentDialog = (salon: Salon) => {
     setSelectedSalon(salon)
-    setPaymentForm({
-      plan_id: '',
-      amount: '',
-      payment_date: format(new Date(), 'yyyy-MM-dd'),
-      notes: '',
-    })
     setPaymentDialogOpen(true)
-  }
-
-  const handlePlanChange = (planId: string) => {
-    const plan = plans.find(p => p.id === planId)
-    setPaymentForm({
-      ...paymentForm,
-      plan_id: planId,
-      amount: plan ? plan.price.toString() : '',
-    })
-  }
-
-  const handleRecordPayment = async () => {
-    if (!selectedSalon || !paymentForm.plan_id) return
-
-    setSubmitting(true)
-
-    try {
-      const response = await fetch('/api/admin/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tenant_id: selectedSalon.id,
-          plan_id: paymentForm.plan_id,
-          amount: parseFloat(paymentForm.amount),
-          payment_date: paymentForm.payment_date,
-          notes: paymentForm.notes || null,
-        }),
-      })
-
-      if (response.ok) {
-        setPaymentDialogOpen(false)
-        fetchData()
-      } else {
-        const data = await response.json()
-        alert(data.error || 'Greška pri evidentiranju uplate')
-      }
-    } catch (error) {
-      alert('Greška pri evidentiranju uplate')
-    } finally {
-      setSubmitting(false)
-    }
   }
 
   const getSubscriptionBadge = (status: string, expiresAt: string | null) => {
@@ -1057,75 +986,12 @@ export default function SaloniPage() {
       </Dialog>
 
       {/* Payment Dialog */}
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Evidentiraj uplatu</DialogTitle>
-            <DialogDescription>
-              {selectedSalon?.name}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Plan *</Label>
-              <Select value={paymentForm.plan_id} onValueChange={handlePlanChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Izaberi plan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {plans.filter(p => !p.is_trial).map((plan) => (
-                    <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} - {plan.price.toLocaleString('sr-RS')} RSD ({plan.duration_days} dana)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="amount">Iznos (RSD) *</Label>
-              <Input
-                id="amount"
-                type="number"
-                value={paymentForm.amount}
-                onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                onWheel={(e) => (e.target as HTMLInputElement).blur()}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="payment_date">Datum uplate *</Label>
-              <Input
-                id="payment_date"
-                type="date"
-                value={paymentForm.payment_date}
-                onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="notes">Napomena</Label>
-              <Textarea
-                id="notes"
-                placeholder="Opciona napomena..."
-                value={paymentForm.notes}
-                onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
-              Otkaži
-            </Button>
-            <Button onClick={handleRecordPayment} disabled={submitting || !paymentForm.plan_id}>
-              {submitting ? 'Čuvanje...' : 'Evidentiraj'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        salon={selectedSalon ? { id: selectedSalon.id, name: selectedSalon.name } : null}
+        onSuccess={fetchData}
+      />
     </div>
   )
 }

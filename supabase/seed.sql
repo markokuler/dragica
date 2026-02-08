@@ -4,7 +4,7 @@
 -- Run with: supabase db reset (applies migrations + seed)
 
 -- Clean existing data (in correct order due to FK constraints)
-TRUNCATE admin_message_log, admin_message_templates, salon_tags, financial_entries, bookings, blocked_slots, customers, working_hours, services, users, tenants CASCADE;
+TRUNCATE admin_message_log, admin_message_templates, salon_tags, payments, coupons, financial_entries, bookings, blocked_slots, customers, working_hours, services, users, tenants CASCADE;
 
 -- =============================================
 -- TEST SALON: Milana Nails
@@ -363,6 +363,35 @@ INSERT INTO working_hours (tenant_id, day_of_week, start_time, end_time, is_acti
   ('de000000-0000-0000-0000-000000000001', 6, '10:00', '16:00', true);
 
 -- =============================================
+-- COUPONS (demo + test)
+-- =============================================
+INSERT INTO coupons (id, code, discount_type, discount_value, max_uses, valid_from, valid_until, description, is_active, is_demo) VALUES
+  ('c0000000-0000-0000-0000-000000000001', 'POPUST20', 'percentage', 20.00, 10, '2025-01-01', '2027-12-31', 'Popust 20% za nove salone', true, true),
+  ('c0000000-0000-0000-0000-000000000002', 'POPUST500', 'fixed', 500.00, 5, '2025-01-01', '2027-12-31', 'Fiksni popust 500 RSD', true, true),
+  ('c0000000-0000-0000-0000-000000000003', 'PROMO50', 'percentage', 50.00, 3, '2025-01-01', '2026-06-30', 'Promotivni 50% popust (limitiran)', true, true);
+
+-- =============================================
+-- PAYMENTS with coupon references (demo)
+-- =============================================
+INSERT INTO payments (id, tenant_id, plan_id, amount, original_amount, payment_date, recorded_by, notes, coupon_id) VALUES
+  ('aa000000-0000-0000-0000-000000000e01',
+   'de000000-0000-0000-0000-000000000001',
+   (SELECT id FROM subscription_plans WHERE name = 'Mesečni' LIMIT 1),
+   2392, 2990,
+   (CURRENT_DATE - INTERVAL '30 days')::date,
+   'de000000-0000-0000-0000-000000000010',
+   'Uplata sa kuponom POPUST20',
+   'c0000000-0000-0000-0000-000000000001'),
+  ('aa000000-0000-0000-0000-000000000e02',
+   'de000000-0000-0000-0000-000000000001',
+   (SELECT id FROM subscription_plans WHERE name = 'Mesečni' LIMIT 1),
+   2490, 2990,
+   CURRENT_DATE::date,
+   'de000000-0000-0000-0000-000000000010',
+   'Uplata sa kuponom POPUST500',
+   'c0000000-0000-0000-0000-000000000002');
+
+-- =============================================
 -- SALON TAGS
 -- =============================================
 INSERT INTO salon_tags (name, color) VALUES
@@ -402,5 +431,7 @@ ON CONFLICT (key) DO NOTHING;
 -- Bookings: 9 (mix of statuses)
 -- Blocked slots: 2
 -- Financial entries: 6
+-- Coupons: 3 (demo, with usage tracking)
+-- Payments: 2 (demo, linked to coupons)
 -- Salon tags: 6
 -- Message templates: 6 (3 triggers x 2 channels)

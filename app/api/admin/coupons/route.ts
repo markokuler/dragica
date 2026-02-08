@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 // Get all coupons
 export async function GET() {
@@ -30,7 +31,31 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch coupons' }, { status: 500 })
     }
 
-    return NextResponse.json({ coupons: coupons || [] })
+    // Compute current_uses from payments table
+    const couponIds = (coupons || []).map(c => c.id)
+    let usageCounts: Record<string, number> = {}
+
+    if (couponIds.length > 0) {
+      const { data: usageData } = await supabase
+        .from('payments')
+        .select('coupon_id')
+        .in('coupon_id', couponIds)
+
+      if (usageData) {
+        for (const row of usageData) {
+          if (row.coupon_id) {
+            usageCounts[row.coupon_id] = (usageCounts[row.coupon_id] || 0) + 1
+          }
+        }
+      }
+    }
+
+    const couponsWithUsage = (coupons || []).map(coupon => ({
+      ...coupon,
+      current_uses: usageCounts[coupon.id] || 0,
+    }))
+
+    return NextResponse.json({ coupons: couponsWithUsage })
   } catch (error) {
     console.error('Error in GET /api/admin/coupons:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -77,6 +102,16 @@ export async function POST(request: NextRequest) {
       console.error('Error creating coupon:', error)
       return NextResponse.json({ error: 'Greška pri kreiranju kupona' }, { status: 500 })
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'create',
+      entityType: 'coupon',
+      entityId: coupon.id,
+      entityName: coupon.code,
+      details: { discount_type, discount_value, max_uses },
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ coupon }, { status: 201 })
   } catch (error) {

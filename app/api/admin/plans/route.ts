@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function GET() {
   try {
@@ -82,6 +83,16 @@ export async function POST(request: NextRequest) {
       console.error('Error creating plan:', error)
       return NextResponse.json({ error: 'Greška pri kreiranju plana' }, { status: 500 })
     }
+
+    await logAudit({
+      userId: user.id,
+      action: 'create',
+      entityType: 'plan',
+      entityId: plan.id,
+      entityName: name,
+      details: { duration_days, price },
+      isDemo: user.is_demo,
+    })
 
     return NextResponse.json({ plan }, { status: 201 })
   } catch (error) {

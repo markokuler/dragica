@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getUserWithRole, requireAdmin } from '@/lib/auth'
+import { logAudit } from '@/lib/audit'
 
 export async function GET() {
   try {
@@ -186,6 +187,16 @@ export async function POST(request: NextRequest) {
       // Subscription tables may not exist yet, skip
       console.log('Subscription tables not ready:', subError)
     }
+
+    await logAudit({
+      userId: userData.id,
+      action: 'create',
+      entityType: 'salon',
+      entityId: tenant.id,
+      entityName: name,
+      details: { slug, subdomain, ownerEmail },
+      isDemo: userData.is_demo,
+    })
 
     return NextResponse.json({ tenant, userId: authUserId }, { status: 201 })
   } catch (error) {
