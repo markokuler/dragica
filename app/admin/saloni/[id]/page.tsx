@@ -77,6 +77,7 @@ import {
   Heart,
   ChevronDown,
   ChevronUp,
+  Pencil,
 } from 'lucide-react'
 
 interface Salon {
@@ -244,6 +245,13 @@ export default function SalonBusinessPage() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(initialTab)
 
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    window.history.replaceState({}, '', url.toString())
+  }
+
   // CRM state
   const [tags, setTags] = useState<SalonTag[]>([])
   const [availableTags, setAvailableTags] = useState<AvailableTag[]>([])
@@ -256,6 +264,7 @@ export default function SalonBusinessPage() {
   const [messageText, setMessageText] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
   const [contactFilter, setContactFilter] = useState('all')
+  const [deleteContactId, setDeleteContactId] = useState<string | null>(null)
   const [showAllContacts, setShowAllContacts] = useState(false)
   const [showAllMessages, setShowAllMessages] = useState(false)
   const [showCompletedReminders, setShowCompletedReminders] = useState(false)
@@ -269,6 +278,8 @@ export default function SalonBusinessPage() {
 
   // Payment dialog
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null)
+  const [deletePaymentId, setDeletePaymentId] = useState<string | null>(null)
   const [paymentForm, setPaymentForm] = useState({
     plan_id: '',
     amount: '',
@@ -595,11 +606,23 @@ export default function SalonBusinessPage() {
 
   // Payment
   const openPaymentDialog = () => {
+    setEditingPayment(null)
     setPaymentForm({
       plan_id: plans[0]?.id || '',
       amount: plans[0]?.price?.toString() || '',
       payment_date: new Date().toISOString().split('T')[0],
       notes: '',
+    })
+    setPaymentDialogOpen(true)
+  }
+
+  const openEditPayment = (payment: Payment) => {
+    setEditingPayment(payment)
+    setPaymentForm({
+      plan_id: payment.plan_id || plans[0]?.id || '',
+      amount: payment.amount.toString(),
+      payment_date: payment.payment_date.split('T')[0],
+      notes: payment.notes || '',
     })
     setPaymentDialogOpen(true)
   }
@@ -617,13 +640,18 @@ export default function SalonBusinessPage() {
     if (!paymentForm.plan_id || !paymentForm.amount || !paymentForm.payment_date) return
     setSavingPayment(true)
     try {
+      const method = editingPayment ? 'PUT' : 'POST'
+      const body = editingPayment
+        ? { payment_id: editingPayment.id, ...paymentForm }
+        : paymentForm
       const response = await fetch(`/api/admin/salons/${salonId}/payments`, {
-        method: 'POST',
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(paymentForm),
+        body: JSON.stringify(body),
       })
       if (response.ok) {
         setPaymentDialogOpen(false)
+        setEditingPayment(null)
         fetchPayments()
         fetchSalon()
       } else {
@@ -634,6 +662,25 @@ export default function SalonBusinessPage() {
       alert('Greška pri čuvanju')
     } finally {
       setSavingPayment(false)
+    }
+  }
+
+  const handleDeletePayment = async (paymentId: string) => {
+    try {
+      const response = await fetch(`/api/admin/salons/${salonId}/payments?payment_id=${paymentId}`, {
+        method: 'DELETE',
+      })
+      if (response.ok) {
+        fetchPayments()
+        fetchSalon()
+      } else {
+        const data = await response.json()
+        alert(data.error || 'Greška pri brisanju')
+      }
+    } catch {
+      alert('Greška pri brisanju')
+    } finally {
+      setDeletePaymentId(null)
     }
   }
 
@@ -667,6 +714,8 @@ export default function SalonBusinessPage() {
       if (response.ok) fetchContacts()
     } catch (error) {
       console.error('Error deleting contact:', error)
+    } finally {
+      setDeleteContactId(null)
     }
   }
 
@@ -964,12 +1013,12 @@ export default function SalonBusinessPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="pregled">Pregled</TabsTrigger>
           <TabsTrigger value="crm">CRM</TabsTrigger>
-          <TabsTrigger value="uplate">Uplate</TabsTrigger>
           <TabsTrigger value="statistika">Statistika</TabsTrigger>
+          <TabsTrigger value="uplate">Uplate</TabsTrigger>
           <TabsTrigger value="podesavanja">Podešavanja</TabsTrigger>
         </TabsList>
 
@@ -1084,7 +1133,7 @@ export default function SalonBusinessPage() {
                         )
                       })}
                       {active.length > 3 && (
-                        <button onClick={() => setActiveTab('crm')} className="text-xs text-primary hover:underline w-full text-center pt-1">
+                        <button onClick={() => handleTabChange('crm')} className="text-xs text-primary hover:underline w-full text-center pt-1">
                           + još {active.length - 3} podsećanja
                         </button>
                       )}
@@ -1478,7 +1527,7 @@ export default function SalonBusinessPage() {
                               const isWhatsApp = contact.contact_type === 'whatsapp'
                               const isViber = contact.contact_type === 'viber'
                               return (
-                                <div key={contact.id} className="relative pl-9">
+                                <div key={contact.id} className="relative pl-9 group">
                                   <div className={`absolute left-0 w-7 h-7 rounded-full flex items-center justify-center ${isWhatsApp ? 'bg-green-100' : isViber ? 'bg-purple-100' : 'bg-secondary'}`}>
                                     <Icon className={`h-3.5 w-3.5 ${isWhatsApp ? 'text-green-600' : isViber ? 'text-purple-600' : 'text-muted-foreground'}`} />
                                   </div>
@@ -1489,7 +1538,7 @@ export default function SalonBusinessPage() {
                                         <span className="text-[10px] text-muted-foreground">
                                           {new Date(contact.contact_date).toLocaleDateString('sr-RS')}
                                         </span>
-                                        <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100" onClick={() => deleteContact(contact.id)}>
+                                        <Button variant="ghost" size="icon" className="h-5 w-5 opacity-0 group-hover:opacity-100" onClick={() => setDeleteContactId(contact.id)}>
                                           <Trash2 className="h-2.5 w-2.5" />
                                         </Button>
                                       </div>
@@ -1672,15 +1721,26 @@ export default function SalonBusinessPage() {
                       <TableHead>Plan</TableHead>
                       <TableHead className="text-right">Iznos</TableHead>
                       <TableHead className="hidden md:table-cell">Napomena</TableHead>
+                      <TableHead className="w-[80px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {payments.map((payment) => (
-                      <TableRow key={payment.id}>
+                      <TableRow key={payment.id} className="group">
                         <TableCell>{new Date(payment.payment_date).toLocaleDateString('sr-RS')}</TableCell>
                         <TableCell>{payment.plan_name}</TableCell>
                         <TableCell className="text-right font-medium">{payment.amount.toLocaleString('sr-RS')} RSD</TableCell>
                         <TableCell className="hidden md:table-cell text-muted-foreground">{payment.notes || '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPayment(payment)}>
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeletePaymentId(payment.id)}>
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -1909,10 +1969,28 @@ export default function SalonBusinessPage() {
         </TabsContent>
       </Tabs>
 
+      {/* Delete Payment Confirmation */}
+      <AlertDialog open={!!deletePaymentId} onOpenChange={(open) => !open && setDeletePaymentId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Brisanje uplate</AlertDialogTitle>
+            <AlertDialogDescription>
+              Da li ste sigurni da želite da obrišete ovu uplatu? Ovo će takođe obrisati povezani finansijski zapis i preračunati pretplatu. Ova akcija se ne može poništiti.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Otkaži</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deletePaymentId && handleDeletePayment(deletePaymentId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Obriši
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Payment Dialog */}
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+      <Dialog open={paymentDialogOpen} onOpenChange={(open) => { setPaymentDialogOpen(open); if (!open) setEditingPayment(null) }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Evidentiraj uplatu</DialogTitle><DialogDescription>Unesi detalje uplate za {salon.name}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{editingPayment ? 'Izmeni uplatu' : 'Evidentiraj uplatu'}</DialogTitle><DialogDescription>{editingPayment ? 'Izmenite detalje uplate' : `Unesi detalje uplate za ${salon.name}`}</DialogDescription></DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Plan *</Label>
@@ -1942,7 +2020,7 @@ export default function SalonBusinessPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Otkaži</Button>
-            <Button onClick={handleSavePayment} disabled={savingPayment || !paymentForm.plan_id || !paymentForm.amount}>{savingPayment ? 'Čuvanje...' : 'Evidentiraj'}</Button>
+            <Button onClick={handleSavePayment} disabled={savingPayment || !paymentForm.plan_id || !paymentForm.amount}>{savingPayment ? 'Čuvanje...' : editingPayment ? 'Sačuvaj izmene' : 'Evidentiraj'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -2003,6 +2081,24 @@ export default function SalonBusinessPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Contact Confirmation */}
+      <AlertDialog open={!!deleteContactId} onOpenChange={(open) => !open && setDeleteContactId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Brisanje stavke</AlertDialogTitle>
+            <AlertDialogDescription>
+              Da li ste sigurni da želite da obrišete ovu stavku iz istorije komunikacije? Ova akcija se ne može poništiti.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Otkaži</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteContactId && deleteContact(deleteContactId)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Obriši
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Message Compose Dialog */}
       <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>

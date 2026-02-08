@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -77,7 +78,18 @@ interface AppSettings {
 export default function PodesavanjaPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('plans')
+  const searchParams = useSearchParams()
+  const validTabs = ['plans', 'account', 'system']
+  const tabParam = searchParams.get('tab')
+  const initialTab = tabParam && validTabs.includes(tabParam) ? tabParam : 'plans'
+  const [activeTab, setActiveTab] = useState(initialTab)
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab)
+    const url = new URL(window.location.href)
+    url.searchParams.set('tab', tab)
+    window.history.replaceState({}, '', url.toString())
+  }
 
   // Plan dialog
   const [planDialogOpen, setPlanDialogOpen] = useState(false)
@@ -396,7 +408,7 @@ export default function PodesavanjaPage() {
           </p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="plans" className="flex items-center gap-2">
               <CreditCard className="h-4 w-4 hidden sm:inline" />
