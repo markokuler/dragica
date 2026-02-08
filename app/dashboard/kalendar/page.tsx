@@ -79,16 +79,34 @@ interface Service {
   is_active: boolean
 }
 
-// Time slots configuration
-const SLOT_INTERVAL_MINUTES = 30
-const WORK_START_HOUR = 9
-const WORK_END_HOUR = 20
+interface WorkingHour {
+  id: string
+  day_of_week: number
+  start_time: string
+  end_time: string
+  is_active: boolean
+}
 
-// Generate time slots for a day (fixed working hours)
-function generateTimeSlots(date: Date): { time: string; datetime: Date }[] {
-  const slots = []
-  for (let hour = WORK_START_HOUR; hour < WORK_END_HOUR; hour++) {
-    for (let minute = 0; minute < 60; minute += SLOT_INTERVAL_MINUTES) {
+// Time slots configuration
+const SLOT_INTERVAL_MINUTES = 15
+
+// Generate time slots from working hours for a specific day
+function generateTimeSlotsFromWorkingHours(date: Date, workingHours: WorkingHour[]): { time: string; datetime: Date }[] {
+  const dayOfWeek = date.getDay()
+  const dayHours = workingHours.filter(wh => wh.day_of_week === dayOfWeek && wh.is_active)
+
+  if (dayHours.length === 0) return []
+
+  const slots: { time: string; datetime: Date }[] = []
+  for (const wh of dayHours) {
+    const [startH, startM] = wh.start_time.split(':').map(Number)
+    const [endH, endM] = wh.end_time.split(':').map(Number)
+    const startMinutes = startH * 60 + startM
+    const endMinutes = endH * 60 + endM
+
+    for (let m = startMinutes; m < endMinutes; m += SLOT_INTERVAL_MINUTES) {
+      const hour = Math.floor(m / 60)
+      const minute = m % 60
       const slotDate = setMinutes(setHours(date, hour), minute)
       slots.push({
         time: format(slotDate, 'HH:mm'),
@@ -97,13 +115,6 @@ function generateTimeSlots(date: Date): { time: string; datetime: Date }[] {
     }
   }
   return slots
-}
-
-// Check if booking is within working hours
-function isBookingInWorkingHours(booking: { start_datetime: string }): boolean {
-  const startTime = new Date(booking.start_datetime)
-  const hour = startTime.getHours()
-  return hour >= WORK_START_HOUR && hour < WORK_END_HOUR
 }
 
 export default function CalendarPage() {
@@ -139,6 +150,9 @@ function CalendarPageContent() {
     updateUrlWithDate(date)
   }, [updateUrlWithDate])
 
+  // Working hours state
+  const [workingHours, setWorkingHours] = useState<WorkingHour[]>([])
+
   // Booking dialog state
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false)
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null)
@@ -149,7 +163,8 @@ function CalendarPageContent() {
     customer_phone: '',
     customer_name: '',
     date: '',
-    time: '',
+    hour: '',
+    minute: '',
   })
 
   const [countryCode, setCountryCode] = useState('381')
@@ -189,10 +204,8 @@ function CalendarPageContent() {
   // Slot detail popup
   const [selectedSlotBooking, setSelectedSlotBooking] = useState<Booking | null>(null)
 
-  // Only bookings within working hours
-  const workingHoursBookings = bookings.filter(isBookingInWorkingHours)
-
-  const timeSlots = generateTimeSlots(selectedDate)
+  const timeSlots = generateTimeSlotsFromWorkingHours(selectedDate, workingHours)
+  const workingHoursBookings = bookings
 
   // Handle URL query params for date and booking
   useEffect(() => {
@@ -232,6 +245,7 @@ function CalendarPageContent() {
 
   useEffect(() => {
     fetchServices()
+    fetchWorkingHours()
   }, [])
 
   const fetchDayData = async () => {
@@ -293,6 +307,16 @@ function CalendarPageContent() {
     }
   }
 
+  const fetchWorkingHours = async () => {
+    try {
+      const response = await fetch('/api/dashboard/working-hours')
+      const data = await response.json()
+      setWorkingHours(data.hours || [])
+    } catch (error) {
+      console.error('Error fetching working hours:', error)
+    }
+  }
+
   const handleClientSearch = (term: string) => {
     setClientSearch(term)
     if (searchTimeout) clearTimeout(searchTimeout)
@@ -340,13 +364,15 @@ function CalendarPageContent() {
   }
 
   const openBookingDialogForSlot = (time: string) => {
+    const [h, m] = time.split(':')
     setEditingBooking(null)
     setBookingForm({
       service_id: '',
       customer_phone: '',
       customer_name: '',
       date: format(selectedDate, 'yyyy-MM-dd'),
-      time: time,
+      hour: h,
+      minute: m,
     })
     setCountryCode('381')
     setPhoneNumber('')
@@ -365,7 +391,8 @@ function CalendarPageContent() {
       customer_phone: booking.customer.phone,
       customer_name: booking.customer.name || '',
       date: format(startDate, 'yyyy-MM-dd'),
-      time: format(startDate, 'HH:mm'),
+      hour: format(startDate, 'HH'),
+      minute: format(startDate, 'mm'),
     })
     // Parse existing phone to pre-fill dropdown
     const parsed = parseInternationalPhone(booking.customer.phone)
@@ -389,7 +416,7 @@ function CalendarPageContent() {
     setSubmitting(true)
 
     try {
-      const start_datetime = `${bookingForm.date}T${bookingForm.time}:00`
+      const start_datetime = `${bookingForm.date}T${bookingForm.hour.padStart(2, '0')}:${bookingForm.minute.padStart(2, '0')}:00`
       const combinedPhone = formatInternationalPhone(countryCode, phoneNumber)
 
       const url = editingBooking
@@ -683,9 +710,12 @@ function CalendarPageContent() {
     }
   }
 
-  // Calculate booking height in slots
+  // Calculate booking height in slots (15-min intervals)
   const getBookingSlotCount = (booking: Booking): number => {
-    return Math.ceil(booking.service.duration_minutes / SLOT_INTERVAL_MINUTES)
+    const startMs = new Date(booking.start_datetime).getTime()
+    const endMs = new Date(booking.end_datetime).getTime()
+    const durationMinutes = (endMs - startMs) / 60000
+    return Math.ceil(durationMinutes / SLOT_INTERVAL_MINUTES)
   }
 
   return (
@@ -1480,27 +1510,67 @@ function CalendarPageContent() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="date">Datum *</Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={bookingForm.date}
+                  onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value, hour: '', minute: '' })}
+                  required
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="date">Datum *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={bookingForm.date}
-                    onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value })}
-                    required
-                  />
+                  <Label>Sat *</Label>
+                  <Select
+                    value={bookingForm.hour}
+                    onValueChange={(value) => setBookingForm({ ...bookingForm, hour: value, minute: '00' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sat" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(() => {
+                        if (!bookingForm.date) return null
+                        const selectedDay = new Date(bookingForm.date).getDay()
+                        const dayHours = workingHours.filter(wh => wh.day_of_week === selectedDay && wh.is_active)
+                        if (dayHours.length === 0) return <SelectItem value="__none" disabled>Salon ne radi</SelectItem>
+
+                        const hours = new Set<number>()
+                        for (const wh of dayHours) {
+                          const [startH] = wh.start_time.split(':').map(Number)
+                          const [endH, endM] = wh.end_time.split(':').map(Number)
+                          const lastHour = endM > 0 ? endH : endH - 1
+                          for (let h = startH; h <= lastHour; h++) hours.add(h)
+                        }
+
+                        return Array.from(hours).sort((a, b) => a - b).map(h => (
+                          <SelectItem key={h} value={String(h).padStart(2, '0')}>
+                            {String(h).padStart(2, '0')}:00
+                          </SelectItem>
+                        ))
+                      })()}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="time">Vreme *</Label>
-                  <Input
-                    id="time"
-                    type="time"
-                    value={bookingForm.time}
-                    onChange={(e) => setBookingForm({ ...bookingForm, time: e.target.value })}
-                    required
-                  />
+                  <Label>Minuti *</Label>
+                  <Select
+                    value={bookingForm.minute}
+                    onValueChange={(value) => setBookingForm({ ...bookingForm, minute: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Min" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['00', '15', '30', '45'].map(m => (
+                        <SelectItem key={m} value={m}>:{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -1519,7 +1589,7 @@ function CalendarPageContent() {
                 <Button type="button" variant="outline" onClick={() => setBookingDialogOpen(false)}>
                   Otkaži
                 </Button>
-                <Button type="submit" disabled={submitting || !bookingForm.service_id}>
+                <Button type="submit" disabled={submitting || !bookingForm.service_id || !bookingForm.hour || !bookingForm.minute}>
                   {submitting ? 'Čuvanje...' : editingBooking ? 'Sačuvaj izmene' : 'Zakaži termin'}
                 </Button>
               </DialogFooter>

@@ -13,30 +13,31 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Find the main demo tenant (created in seed.sql, slug = 'dragica-demo')
-    const { data: mainTenant, error: tenantsError } = await supabase
+    // Find all demo tenants (5 Nails Salon slots)
+    const { data: demoTenants, error: tenantsError } = await supabase
       .from('tenants')
       .select('id')
       .eq('is_demo', true)
-      .eq('slug', 'dragica-demo')
-      .single()
+      .order('id')
 
-    if (tenantsError || !mainTenant) {
-      return NextResponse.json({ error: 'Main demo tenant not found', details: tenantsError }, { status: 404 })
+    if (tenantsError || !demoTenants || demoTenants.length === 0) {
+      return NextResponse.json({ error: 'Demo tenants not found', details: tenantsError }, { status: 404 })
     }
 
-    const mainDemoTenantId = mainTenant.id
+    // 1. Populate admin demo data (protect all owner demo tenants from cleanup)
+    const adminResult = await populateAdminDemoData(supabase, demoTenants.map(t => t.id))
 
-    // 1. Populate admin demo data (creates extra demo tenants, plans, payments, etc.)
-    const adminResult = await populateAdminDemoData(supabase, mainDemoTenantId)
-
-    // 2. Populate salon demo data for the main demo tenant
-    const salonResult = await populateDemoData(supabase, mainDemoTenantId)
+    // 2. Populate salon demo data for ALL demo tenants
+    const salonResults = []
+    for (const tenant of demoTenants) {
+      const result = await populateDemoData(supabase, tenant.id)
+      salonResults.push({ tenantId: tenant.id, ...result })
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Demo data reset complete',
-      salon: { tenantId: mainDemoTenantId, ...salonResult },
+      message: `Demo data reset complete for ${demoTenants.length} tenants`,
+      salons: salonResults,
       admin: adminResult,
     })
   } catch (error) {

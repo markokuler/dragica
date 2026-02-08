@@ -141,6 +141,65 @@ export async function PUT(
       }
     }
 
+    // Validate working hours and conflicts if time is changing
+    if (start_datetime) {
+      const newStart = new Date(startDatetimeToUse)
+      const newEnd = new Date(endDatetime)
+
+      // Check working hours
+      const dayOfWeek = newStart.getDay()
+      const { data: workingHours } = await supabase
+        .from('working_hours')
+        .select('start_time, end_time')
+        .eq('tenant_id', tenantId)
+        .eq('day_of_week', dayOfWeek)
+        .eq('is_active', true)
+
+      if (!workingHours || workingHours.length === 0) {
+        return NextResponse.json({ error: 'Salon ne radi na izabrani dan' }, { status: 400 })
+      }
+
+      const bookingStartMinutes = newStart.getHours() * 60 + newStart.getMinutes()
+      const bookingEndMinutes = newEnd.getHours() * 60 + newEnd.getMinutes()
+      const fitsInWorkingHours = workingHours.some(wh => {
+        const [startH, startM] = wh.start_time.split(':').map(Number)
+        const [endH, endM] = wh.end_time.split(':').map(Number)
+        const whStart = startH * 60 + startM
+        const whEnd = endH * 60 + endM
+        return bookingStartMinutes >= whStart && bookingEndMinutes <= whEnd
+      })
+
+      if (!fitsInWorkingHours) {
+        return NextResponse.json({ error: 'Izabrani termin je van radnog vremena' }, { status: 400 })
+      }
+
+      // Check blocked slots
+      const { data: blockedSlots } = await supabase
+        .from('blocked_slots')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .lt('start_datetime', newEnd.toISOString())
+        .gt('end_datetime', newStart.toISOString())
+
+      if (blockedSlots && blockedSlots.length > 0) {
+        return NextResponse.json({ error: 'Izabrani termin je blokiran' }, { status: 400 })
+      }
+
+      // Check conflicting bookings (exclude self)
+      const { data: conflictingBookings } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('tenant_id', tenantId)
+        .neq('id', id)
+        .in('status', ['pending', 'confirmed'])
+        .lt('start_datetime', newEnd.toISOString())
+        .gt('end_datetime', newStart.toISOString())
+
+      if (conflictingBookings && conflictingBookings.length > 0) {
+        return NextResponse.json({ error: 'Termin je već zauzet' }, { status: 400 })
+      }
+    }
+
     // Build update data
     const updateData: any = {}
     if (status) updateData.status = status

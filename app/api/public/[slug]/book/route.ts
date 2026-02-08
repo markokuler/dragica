@@ -67,6 +67,40 @@ export async function POST(
       )
     }
 
+    // Check working hours for the requested day
+    const dayOfWeek = startDatetime.getDay() // 0=Sunday, 1=Monday, ...
+    const { data: workingHours } = await supabase
+      .from('working_hours')
+      .select('start_time, end_time')
+      .eq('tenant_id', tenant.id)
+      .eq('day_of_week', dayOfWeek)
+      .eq('is_active', true)
+
+    if (!workingHours || workingHours.length === 0) {
+      return NextResponse.json(
+        { error: 'Salon ne radi na izabrani dan' },
+        { status: 400 }
+      )
+    }
+
+    // Check that the booking fits within at least one working hours block
+    const bookingStartMinutes = startDatetime.getHours() * 60 + startDatetime.getMinutes()
+    const bookingEndMinutes = endDatetime.getHours() * 60 + endDatetime.getMinutes()
+    const fitsInWorkingHours = workingHours.some(wh => {
+      const [startH, startM] = wh.start_time.split(':').map(Number)
+      const [endH, endM] = wh.end_time.split(':').map(Number)
+      const whStart = startH * 60 + startM
+      const whEnd = endH * 60 + endM
+      return bookingStartMinutes >= whStart && bookingEndMinutes <= whEnd
+    })
+
+    if (!fitsInWorkingHours) {
+      return NextResponse.json(
+        { error: 'Izabrani termin je van radnog vremena' },
+        { status: 400 }
+      )
+    }
+
     // Check for blocked slots
     const { data: blockedSlots } = await supabase
       .from('blocked_slots')

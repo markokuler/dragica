@@ -10,19 +10,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid demo type' }, { status: 400 })
     }
 
-    const email = type === 'admin'
-      ? process.env.DEMO_ADMIN_EMAIL
-      : process.env.DEMO_OWNER_EMAIL
-    const password = type === 'admin'
-      ? process.env.DEMO_ADMIN_PASSWORD
-      : process.env.DEMO_OWNER_PASSWORD
+    const adminClient = createAdminClient()
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Demo nalog nije konfigurisan' }, { status: 500 })
+    let email: string
+    let password: string
+
+    if (type === 'admin') {
+      // Admin demo: single fixed account
+      email = process.env.DEMO_ADMIN_EMAIL || ''
+      password = process.env.DEMO_ADMIN_PASSWORD || ''
+
+      if (!email || !password) {
+        return NextResponse.json({ error: 'Demo nalog nije konfigurisan' }, { status: 500 })
+      }
+    } else {
+      // Owner demo: rotate between available demo owner accounts
+      password = process.env.DEMO_OWNER_PASSWORD || ''
+      if (!password) {
+        return NextResponse.json({ error: 'Demo nalog nije konfigurisan' }, { status: 500 })
+      }
+
+      const { data: demoOwners } = await adminClient
+        .from('users')
+        .select('email')
+        .eq('is_demo', true)
+        .eq('role', 'client')
+
+      if (!demoOwners || demoOwners.length === 0) {
+        return NextResponse.json({ error: 'Demo nalozi nisu pronađeni' }, { status: 500 })
+      }
+
+      // Pick a random slot
+      const randomIndex = Math.floor(Math.random() * demoOwners.length)
+      email = demoOwners[randomIndex].email
     }
 
     // Verify user is actually a demo user before signing in
-    const adminClient = createAdminClient()
     const { data: userData } = await adminClient
       .from('users')
       .select('is_demo')

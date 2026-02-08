@@ -70,8 +70,10 @@ export default function DashboardPage() {
     customer_phone: '',
     customer_name: '',
     date: '',
-    time: '',
+    hour: '',
+    minute: '',
   })
+  const [workingHours, setWorkingHours] = useState<Array<{ day_of_week: number; start_time: string; end_time: string; is_active: boolean }>>([])
 
   const [countryCode, setCountryCode] = useState('381')
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -95,6 +97,7 @@ export default function DashboardPage() {
   useEffect(() => {
     fetchDashboardData()
     fetchServices()
+    fetchWorkingHours()
   }, [])
 
   const fetchDashboardData = async () => {
@@ -127,6 +130,16 @@ export default function DashboardPage() {
       setServices((data.services || []).filter((s: Service) => s.is_active))
     } catch (error) {
       console.error('Error fetching services:', error)
+    }
+  }
+
+  const fetchWorkingHours = async () => {
+    try {
+      const response = await fetch('/api/dashboard/working-hours')
+      const data = await response.json()
+      setWorkingHours(data.hours || [])
+    } catch (error) {
+      console.error('Error fetching working hours:', error)
     }
   }
 
@@ -182,7 +195,8 @@ export default function DashboardPage() {
       customer_phone: '',
       customer_name: '',
       date: format(new Date(), 'yyyy-MM-dd'),
-      time: '',
+      hour: '',
+      minute: '',
     })
     setCountryCode('381')
     setPhoneNumber('')
@@ -198,7 +212,7 @@ export default function DashboardPage() {
     setSubmitting(true)
 
     try {
-      const start_datetime = `${bookingForm.date}T${bookingForm.time}:00`
+      const start_datetime = `${bookingForm.date}T${bookingForm.hour.padStart(2, '0')}:${bookingForm.minute.padStart(2, '0')}:00`
       const combinedPhone = formatInternationalPhone(countryCode, phoneNumber)
 
       const response = await fetch('/api/dashboard/bookings', {
@@ -547,27 +561,67 @@ export default function DashboardPage() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="date">Datum *</Label>
+                <Input
+                  id="date"
+                  type="date"
+                  value={bookingForm.date}
+                  onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value, hour: '', minute: '' })}
+                  required
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="date">Datum *</Label>
-                  <Input
-                    id="date"
-                    type="date"
-                    value={bookingForm.date}
-                    onChange={(e) => setBookingForm({ ...bookingForm, date: e.target.value })}
-                    required
-                  />
+                  <Label>Sat *</Label>
+                  <Select
+                    value={bookingForm.hour}
+                    onValueChange={(value) => setBookingForm({ ...bookingForm, hour: value, minute: '00' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sat" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(() => {
+                        if (!bookingForm.date) return null
+                        const selectedDay = new Date(bookingForm.date).getDay()
+                        const dayHours = workingHours.filter(wh => wh.day_of_week === selectedDay && wh.is_active)
+                        if (dayHours.length === 0) return <SelectItem value="__none" disabled>Salon ne radi</SelectItem>
+
+                        const hours = new Set<number>()
+                        for (const wh of dayHours) {
+                          const [startH] = wh.start_time.split(':').map(Number)
+                          const [endH, endM] = wh.end_time.split(':').map(Number)
+                          const lastHour = endM > 0 ? endH : endH - 1
+                          for (let h = startH; h <= lastHour; h++) hours.add(h)
+                        }
+
+                        return Array.from(hours).sort((a, b) => a - b).map(h => (
+                          <SelectItem key={h} value={String(h).padStart(2, '0')}>
+                            {String(h).padStart(2, '0')}:00
+                          </SelectItem>
+                        ))
+                      })()}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="time">Vreme *</Label>
-                  <Input
-                    id="time"
-                    type="time"
-                    value={bookingForm.time}
-                    onChange={(e) => setBookingForm({ ...bookingForm, time: e.target.value })}
-                    required
-                  />
+                  <Label>Minuti *</Label>
+                  <Select
+                    value={bookingForm.minute}
+                    onValueChange={(value) => setBookingForm({ ...bookingForm, minute: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Min" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {['00', '15', '30', '45'].map(m => (
+                        <SelectItem key={m} value={m}>:{m}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -586,7 +640,7 @@ export default function DashboardPage() {
                 <Button type="button" variant="outline" onClick={() => setBookingDialogOpen(false)}>
                   Otkaži
                 </Button>
-                <Button type="submit" disabled={submitting || !bookingForm.service_id}>
+                <Button type="submit" disabled={submitting || !bookingForm.service_id || !bookingForm.hour || !bookingForm.minute}>
                   {submitting ? 'Kreiranje...' : 'Zakaži termin'}
                 </Button>
               </DialogFooter>

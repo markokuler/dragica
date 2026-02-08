@@ -239,22 +239,14 @@ INSERT INTO financial_entries (tenant_id, type, category, amount, description, e
 -- =============================================
 -- DEMO ACCOUNTS (for testing demo login locally)
 -- =============================================
--- Demo tenant
+-- Demo tenants (5 identical slots for parallel demo usage)
 INSERT INTO tenants (id, slug, name, email, phone, subdomain, accent_color, description, is_active, is_demo, subscription_status, subscription_expires_at)
-VALUES (
-  'de000000-0000-0000-0000-000000000001',
-  'dragica-demo',
-  'Dragica Demo Salon',
-  'demo-salon@dragica.local',
-  '+381600000000',
-  'demo',
-  '#C17F59',
-  'Demo salon za isprobavanje Dragica platforme.',
-  true,
-  true,
-  'active',
-  (NOW() + INTERVAL '10 years')
-);
+VALUES
+  ('de000000-0000-0000-0000-000000000001', 'nails-salon-1', 'Nails Salon', 'demo-salon-1@dragica.local', '+381600000001', 'nails-salon-1', '#C17F59', 'Profesionalni salon za negu noktiju. Manikir, pedikir, gel, nail art.', true, true, 'active', NOW() + INTERVAL '10 years'),
+  ('de000000-0000-0000-0000-000000000002', 'nails-salon-2', 'Nails Salon', 'demo-salon-2@dragica.local', '+381600000002', 'nails-salon-2', '#C17F59', 'Profesionalni salon za negu noktiju. Manikir, pedikir, gel, nail art.', true, true, 'active', NOW() + INTERVAL '10 years'),
+  ('de000000-0000-0000-0000-000000000003', 'nails-salon-3', 'Nails Salon', 'demo-salon-3@dragica.local', '+381600000003', 'nails-salon-3', '#C17F59', 'Profesionalni salon za negu noktiju. Manikir, pedikir, gel, nail art.', true, true, 'active', NOW() + INTERVAL '10 years'),
+  ('de000000-0000-0000-0000-000000000004', 'nails-salon-4', 'Nails Salon', 'demo-salon-4@dragica.local', '+381600000004', 'nails-salon-4', '#C17F59', 'Profesionalni salon za negu noktiju. Manikir, pedikir, gel, nail art.', true, true, 'active', NOW() + INTERVAL '10 years'),
+  ('de000000-0000-0000-0000-000000000005', 'nails-salon-5', 'Nails Salon', 'demo-salon-5@dragica.local', '+381600000005', 'nails-salon-5', '#C17F59', 'Profesionalni salon za negu noktiju. Manikir, pedikir, gel, nail art.', true, true, 'active', NOW() + INTERVAL '10 years');
 
 -- Demo admin auth user
 INSERT INTO auth.users (
@@ -299,7 +291,7 @@ INSERT INTO users (id, email, role, tenant_id, is_demo)
 VALUES ('de000000-0000-0000-0000-000000000010', 'demo-admin@dragica.local', 'admin', NULL, true)
 ON CONFLICT (id) DO UPDATE SET is_demo = true;
 
--- Demo salon owner auth user
+-- Demo salon owner auth users (5 slots, same password: demo1234)
 INSERT INTO auth.users (
   id, instance_id, email, encrypted_password, email_confirmed_at,
   role, aud, raw_user_meta_data,
@@ -309,58 +301,70 @@ INSERT INTO auth.users (
   reauthentication_token,
   created_at, updated_at
 )
-VALUES (
-  'de000000-0000-0000-0000-000000000020',
-  '00000000-0000-0000-0000-000000000000',
-  'demo-salon@dragica.local',
-  crypt('demo1234', gen_salt('bf')),
-  NOW(),
-  'authenticated',
-  'authenticated',
-  jsonb_build_object('role', 'client', 'tenant_id', 'de000000-0000-0000-0000-000000000001'),
-  '', '',
-  '', '', '',
-  '', '',
-  '',
-  NOW(),
-  NOW()
-);
+VALUES
+  ('de000000-0000-0000-0000-000000000020', '00000000-0000-0000-0000-000000000000', 'demo-salon-1@dragica.local', crypt('demo1234', gen_salt('bf')), NOW(), 'authenticated', 'authenticated', jsonb_build_object('role', 'client', 'tenant_id', 'de000000-0000-0000-0000-000000000001'), '', '', '', '', '', '', '', '', NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000000', 'demo-salon-2@dragica.local', crypt('demo1234', gen_salt('bf')), NOW(), 'authenticated', 'authenticated', jsonb_build_object('role', 'client', 'tenant_id', 'de000000-0000-0000-0000-000000000002'), '', '', '', '', '', '', '', '', NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-000000000000', 'demo-salon-3@dragica.local', crypt('demo1234', gen_salt('bf')), NOW(), 'authenticated', 'authenticated', jsonb_build_object('role', 'client', 'tenant_id', 'de000000-0000-0000-0000-000000000003'), '', '', '', '', '', '', '', '', NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000023', '00000000-0000-0000-0000-000000000000', 'demo-salon-4@dragica.local', crypt('demo1234', gen_salt('bf')), NOW(), 'authenticated', 'authenticated', jsonb_build_object('role', 'client', 'tenant_id', 'de000000-0000-0000-0000-000000000004'), '', '', '', '', '', '', '', '', NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000024', '00000000-0000-0000-0000-000000000000', 'demo-salon-5@dragica.local', crypt('demo1234', gen_salt('bf')), NOW(), 'authenticated', 'authenticated', jsonb_build_object('role', 'client', 'tenant_id', 'de000000-0000-0000-0000-000000000005'), '', '', '', '', '', '', '', '', NOW(), NOW());
 
 INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-VALUES (
-  'de000000-0000-0000-0000-000000000020',
-  'de000000-0000-0000-0000-000000000020',
-  'demo-salon@dragica.local',
-  jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000020', 'email', 'demo-salon@dragica.local'),
-  'email',
-  NOW(),
-  NOW(),
-  NOW()
+VALUES
+  ('de000000-0000-0000-0000-000000000020', 'de000000-0000-0000-0000-000000000020', 'demo-salon-1@dragica.local', jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000020', 'email', 'demo-salon-1@dragica.local'), 'email', NOW(), NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000021', 'de000000-0000-0000-0000-000000000021', 'demo-salon-2@dragica.local', jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000021', 'email', 'demo-salon-2@dragica.local'), 'email', NOW(), NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000022', 'de000000-0000-0000-0000-000000000022', 'demo-salon-3@dragica.local', jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000022', 'email', 'demo-salon-3@dragica.local'), 'email', NOW(), NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000023', 'de000000-0000-0000-0000-000000000023', 'demo-salon-4@dragica.local', jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000023', 'email', 'demo-salon-4@dragica.local'), 'email', NOW(), NOW(), NOW()),
+  ('de000000-0000-0000-0000-000000000024', 'de000000-0000-0000-0000-000000000024', 'demo-salon-5@dragica.local', jsonb_build_object('sub', 'de000000-0000-0000-0000-000000000024', 'email', 'demo-salon-5@dragica.local'), 'email', NOW(), NOW(), NOW());
+
+INSERT INTO users (id, email, role, tenant_id, is_demo) VALUES
+  ('de000000-0000-0000-0000-000000000020', 'demo-salon-1@dragica.local', 'client', 'de000000-0000-0000-0000-000000000001', true),
+  ('de000000-0000-0000-0000-000000000021', 'demo-salon-2@dragica.local', 'client', 'de000000-0000-0000-0000-000000000002', true),
+  ('de000000-0000-0000-0000-000000000022', 'demo-salon-3@dragica.local', 'client', 'de000000-0000-0000-0000-000000000003', true),
+  ('de000000-0000-0000-0000-000000000023', 'demo-salon-4@dragica.local', 'client', 'de000000-0000-0000-0000-000000000004', true),
+  ('de000000-0000-0000-0000-000000000024', 'demo-salon-5@dragica.local', 'client', 'de000000-0000-0000-0000-000000000005', true)
+ON CONFLICT (id) DO UPDATE SET is_demo = true, tenant_id = EXCLUDED.tenant_id;
+
+-- Demo services (all 5 Nails Salon tenants get identical services)
+INSERT INTO services (tenant_id, name, duration_minutes, price, is_active)
+SELECT t.id, s.name, s.duration_minutes, s.price, true
+FROM (VALUES
+  ('Manikir - klasičan', 45, 1500.00),
+  ('Manikir - gel lak', 60, 2000.00),
+  ('Manikir - gel nadogradnja', 90, 3500.00),
+  ('Pedikir - klasičan', 60, 2000.00),
+  ('Pedikir - spa', 90, 3000.00),
+  ('Nail art - po noktu', 15, 200.00),
+  ('Skidanje gela', 30, 800.00),
+  ('Manikir + Pedikir combo', 105, 3200.00)
+) AS s(name, duration_minutes, price)
+CROSS JOIN tenants t
+WHERE t.is_demo = true AND t.id IN (
+  'de000000-0000-0000-0000-000000000001',
+  'de000000-0000-0000-0000-000000000002',
+  'de000000-0000-0000-0000-000000000003',
+  'de000000-0000-0000-0000-000000000004',
+  'de000000-0000-0000-0000-000000000005'
 );
 
-INSERT INTO users (id, email, role, tenant_id, is_demo)
-VALUES ('de000000-0000-0000-0000-000000000020', 'demo-salon@dragica.local', 'client', 'de000000-0000-0000-0000-000000000001', true)
-ON CONFLICT (id) DO UPDATE SET is_demo = true, tenant_id = 'de000000-0000-0000-0000-000000000001';
-
--- Demo services
-INSERT INTO services (tenant_id, name, duration_minutes, price, is_active) VALUES
-  ('de000000-0000-0000-0000-000000000001', 'Manikir - klasičan', 45, 1500.00, true),
-  ('de000000-0000-0000-0000-000000000001', 'Manikir - gel lak', 60, 2000.00, true),
-  ('de000000-0000-0000-0000-000000000001', 'Manikir - gel nadogradnja', 90, 3500.00, true),
-  ('de000000-0000-0000-0000-000000000001', 'Pedikir - klasičan', 60, 2000.00, true),
-  ('de000000-0000-0000-0000-000000000001', 'Pedikir - spa', 90, 3000.00, true),
-  ('de000000-0000-0000-0000-000000000001', 'Nail art - po noktu', 15, 200.00, true),
-  ('de000000-0000-0000-0000-000000000001', 'Skidanje gela', 30, 800.00, true),
-  ('de000000-0000-0000-0000-000000000001', 'Manikir + Pedikir combo', 105, 3200.00, true);
-
--- Demo working hours
-INSERT INTO working_hours (tenant_id, day_of_week, start_time, end_time, is_active) VALUES
-  ('de000000-0000-0000-0000-000000000001', 1, '09:00', '20:00', true),
-  ('de000000-0000-0000-0000-000000000001', 2, '09:00', '20:00', true),
-  ('de000000-0000-0000-0000-000000000001', 3, '09:00', '20:00', true),
-  ('de000000-0000-0000-0000-000000000001', 4, '09:00', '20:00', true),
-  ('de000000-0000-0000-0000-000000000001', 5, '09:00', '20:00', true),
-  ('de000000-0000-0000-0000-000000000001', 6, '10:00', '16:00', true);
+-- Demo working hours (all 5 Nails Salon tenants, Mon-Sat)
+INSERT INTO working_hours (tenant_id, day_of_week, start_time, end_time, is_active)
+SELECT t.id, wh.dow, wh.start_t, wh.end_t, true
+FROM (VALUES
+  (1, '09:00'::time, '20:00'::time),
+  (2, '09:00'::time, '20:00'::time),
+  (3, '09:00'::time, '20:00'::time),
+  (4, '09:00'::time, '20:00'::time),
+  (5, '09:00'::time, '20:00'::time),
+  (6, '10:00'::time, '16:00'::time)
+) AS wh(dow, start_t, end_t)
+CROSS JOIN tenants t
+WHERE t.is_demo = true AND t.id IN (
+  'de000000-0000-0000-0000-000000000001',
+  'de000000-0000-0000-0000-000000000002',
+  'de000000-0000-0000-0000-000000000003',
+  'de000000-0000-0000-0000-000000000004',
+  'de000000-0000-0000-0000-000000000005'
+);
 
 -- =============================================
 -- COUPONS (demo + test)
@@ -424,9 +428,10 @@ ON CONFLICT (key) DO NOTHING;
 -- Summary
 -- =============================================
 -- Users: admin@dragica.local (admin/admin123), milana@test.local (client/test1234)
--- Demo: demo-admin@dragica.local (admin/demo1234), demo-salon@dragica.local (client/demo1234)
--- Test salons: 2 (milana-nails, lepota-salon) + 1 demo (dragica-demo)
--- Services: 7 + 6 + 8 = 21
+-- Demo Admin: demo-admin@dragica.local (admin/demo1234)
+-- Demo Owner: demo-salon-1..5@dragica.local (client/demo1234) x5 slots
+-- Test salons: 2 (milana-nails, lepota-salon) + 5 demo (nails-salon-1..5)
+-- Services: 7 + 6 + 8x5 = 53
 -- Customers: 5
 -- Bookings: 9 (mix of statuses)
 -- Blocked slots: 2

@@ -559,24 +559,29 @@ export interface PopulateAdminDemoResult {
   salonCustomers: number
   salonBookings: number
   contactHistory: number
+  messages: number
 }
 
 export async function populateAdminDemoData(
   supabase: SupabaseClient,
-  mainDemoTenantId: string,
+  mainDemoTenantIdOrIds: string | string[],
 ): Promise<PopulateAdminDemoResult> {
+  // Support both single ID (legacy) and array of protected IDs
+  const protectedIds = Array.isArray(mainDemoTenantIdOrIds) ? mainDemoTenantIdOrIds : [mainDemoTenantIdOrIds]
+  const mainDemoTenantId = protectedIds[0]
+
   const now = new Date()
   let seed = 1000
 
   // =============================================
   // CLEANUP: Delete previous admin demo data
   // =============================================
-  // Delete demo tenants (NOT the main demo salon)
+  // Delete demo tenants (NOT the owner demo salons)
   const { data: existingDemoTenants } = await supabase
     .from('tenants')
     .select('id')
     .eq('is_demo', true)
-    .neq('id', mainDemoTenantId)
+    .not('id', 'in', `(${protectedIds.join(',')})`)
 
   if (existingDemoTenants?.length) {
     const ids = existingDemoTenants.map(t => t.id)
@@ -588,6 +593,7 @@ export async function populateAdminDemoData(
   }
 
   // Delete demo-flagged admin entries
+  await supabase.from('admin_message_log').delete().eq('is_demo', true)
   await supabase.from('admin_financial_entries').delete().eq('is_demo', true)
   await supabase.from('audit_log').delete().eq('is_demo', true)
   await supabase.from('coupons').delete().eq('is_demo', true)
@@ -617,7 +623,7 @@ export async function populateAdminDemoData(
     .select('id, name, duration_days, price, is_trial')
 
   if (!plans?.length) {
-    return { salons: 0, plans: 0, subscriptions: 0, payments: 0, finances: 0, coupons: 0, auditEntries: 0, reminders: 0, tags: 0, salonServices: 0, salonCustomers: 0, salonBookings: 0, contactHistory: 0 }
+    return { salons: 0, plans: 0, subscriptions: 0, payments: 0, finances: 0, coupons: 0, auditEntries: 0, reminders: 0, tags: 0, salonServices: 0, salonCustomers: 0, salonBookings: 0, contactHistory: 0, messages: 0 }
   }
 
   // =============================================
@@ -726,19 +732,28 @@ export async function populateAdminDemoData(
   }
 
   // =============================================
-  // PAYMENTS (25+ over 6 months)
+  // PAYMENTS (25+ over 6 months, some with coupons)
   // =============================================
   const paymentsToInsert: Array<{
     tenant_id: string
     plan_id: string
     amount: number
+    original_amount?: number
+    coupon_id?: string
     payment_date: string
     notes: string | null
     created_at: string
   }> = []
 
+  // We'll link coupons to ~20% of payments after coupons are created
+  // For now, collect payment data
+  const PAYMENT_NOTES = [
+    'Uplata na račun', 'Gotovinska uplata', 'Prenos sa računa',
+    'Uplata u kešu prilikom posete', 'Virman', null, null, null, null, null,
+  ]
+
   // Generate payments for active/paid tenants
-  for (const tenant of [...demoTenants, { id: mainDemoTenantId, name: 'Dragica Demo Salon', subscription_status: 'active', created_at: new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString() }]) {
+  for (const tenant of [...demoTenants, { id: mainDemoTenantId, name: 'Nails Salon', subscription_status: 'active', created_at: new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString() }]) {
     if (tenant.subscription_status === 'expired' && seededRandom(seed++) > 0.3) continue
 
     // 1-4 payments per tenant
@@ -756,15 +771,13 @@ export async function populateAdminDemoData(
         plan_id: plan.id,
         amount: plan.price,
         payment_date: paymentDate.toISOString().split('T')[0],
-        notes: seededRandom(seed++) > 0.7 ? 'Uplata na račun' : null,
+        notes: PAYMENT_NOTES[Math.floor(seededRandom(seed++) * PAYMENT_NOTES.length)],
         created_at: paymentDate.toISOString(),
       })
     }
   }
 
-  if (paymentsToInsert.length > 0) {
-    await supabase.from('payments').insert(paymentsToInsert)
-  }
+  // Payments will be inserted after coupons so we can link some
 
   // =============================================
   // ADMIN FINANCIAL ENTRIES (is_demo=true)
@@ -782,27 +795,33 @@ export async function populateAdminDemoData(
   for (let month = 0; month < 6; month++) {
     const monthDate = new Date(now.getFullYear(), now.getMonth() - month, 1)
 
+    // Growth factor: newer months have more income (business is growing)
+    const growthMultiplier = 1 + (5 - month) * 0.08 // 1.40x for current month, down to 1.0x for oldest
+
     // Income: subscriptions, consulting, partnerships, other
+    // Total income ~250-350k per month (growing), clearly exceeding expenses ~180-220k
     const monthlyIncome = [
-      { category: 'subscriptions', amount: 35000 + Math.floor(seededRandom(seed++) * 15000), description: `Mesečne pretplate - ${month === 0 ? 'tekući' : 'prethodni'} mesec`, day: 1 },
-      { category: 'subscriptions', amount: 15000 + Math.floor(seededRandom(seed++) * 10000), description: 'Nove pretplate', day: 10 + Math.floor(seededRandom(seed++) * 5) },
-      { category: 'subscriptions', amount: 20000 + Math.floor(seededRandom(seed++) * 20000), description: 'Godišnje pretplate', day: 15 + Math.floor(seededRandom(seed++) * 5) },
-      { category: 'consulting', amount: 5000 + Math.floor(seededRandom(seed++) * 10000), description: 'Konsultacije za nove salone', day: 5 + Math.floor(seededRandom(seed++) * 10) },
-      { category: 'partnerships', amount: 3000 + Math.floor(seededRandom(seed++) * 7000), description: seededRandom(seed++) > 0.5 ? 'Partnerstvo sa dobavljačem gel lakova' : 'Affiliate program', day: 12 + Math.floor(seededRandom(seed++) * 10) },
-      { category: 'other', amount: 1000 + Math.floor(seededRandom(seed++) * 5000), description: seededRandom(seed++) > 0.5 ? 'Prodaja edukativnog materijala' : 'Sponzorstvo na sajmu lepote', day: 20 + Math.floor(seededRandom(seed++) * 5) },
+      { category: 'subscriptions', amount: Math.floor((55000 + seededRandom(seed++) * 15000) * growthMultiplier), description: `Mesečne pretplate - ${month === 0 ? 'tekući' : 'prethodni'} mesec`, day: 1 },
+      { category: 'subscriptions', amount: Math.floor((25000 + seededRandom(seed++) * 10000) * growthMultiplier), description: 'Nove pretplate', day: 10 + Math.floor(seededRandom(seed++) * 5) },
+      { category: 'subscriptions', amount: Math.floor((35000 + seededRandom(seed++) * 20000) * growthMultiplier), description: 'Godišnje pretplate - produženja', day: 15 + Math.floor(seededRandom(seed++) * 5) },
+      { category: 'subscriptions', amount: Math.floor((15000 + seededRandom(seed++) * 15000) * growthMultiplier), description: 'Kvartalne pretplate', day: 20 + Math.floor(seededRandom(seed++) * 5) },
+      { category: 'consulting', amount: 8000 + Math.floor(seededRandom(seed++) * 12000), description: 'Konsultacije i onboarding novih salona', day: 5 + Math.floor(seededRandom(seed++) * 10) },
+      { category: 'partnerships', amount: 5000 + Math.floor(seededRandom(seed++) * 10000), description: seededRandom(seed++) > 0.5 ? 'Partnerstvo sa dobavljačem gel lakova' : 'Affiliate provizije', day: 12 + Math.floor(seededRandom(seed++) * 10) },
+      { category: 'other', amount: 3000 + Math.floor(seededRandom(seed++) * 7000), description: seededRandom(seed++) > 0.5 ? 'Edukativni materijal za salone' : 'Sajam lepote - štand prihod', day: 20 + Math.floor(seededRandom(seed++) * 5) },
     ]
 
     // Expenses: hosting, marketing, salaries, software, office, legal, other
+    // Total expenses ~180-220k (stable, not growing as fast as income)
     const monthlyExpenses = [
-      { category: 'hosting', amount: 8000 + Math.floor(seededRandom(seed++) * 4000), description: `Vercel + Supabase hosting`, day: 1 },
-      { category: 'hosting', amount: 2000 + Math.floor(seededRandom(seed++) * 1000), description: 'Domain + SSL', day: 1 },
-      { category: 'marketing', amount: 10000 + Math.floor(seededRandom(seed++) * 15000), description: 'Google Ads + Instagram reklame', day: 3 },
-      { category: 'marketing', amount: 3000 + Math.floor(seededRandom(seed++) * 5000), description: 'Influencer saradnje', day: 15 + Math.floor(seededRandom(seed++) * 5) },
-      { category: 'salaries', amount: 120000 + Math.floor(seededRandom(seed++) * 30000), description: 'Plate tima', day: 1 },
-      { category: 'software', amount: 5000 + Math.floor(seededRandom(seed++) * 3000), description: 'Licence (Figma, GitHub, Slack)', day: 5 },
-      { category: 'office', amount: 15000 + Math.floor(seededRandom(seed++) * 5000), description: 'Zakup kancelarije', day: 1 },
-      { category: 'legal', amount: 5000 + Math.floor(seededRandom(seed++) * 10000), description: seededRandom(seed++) > 0.5 ? 'Računovodstvo' : 'Pravni konsultant', day: 10 + Math.floor(seededRandom(seed++) * 10) },
-      { category: 'other', amount: 2000 + Math.floor(seededRandom(seed++) * 5000), description: seededRandom(seed++) > 0.5 ? 'Teambuilding' : 'Konferencija / edukacija', day: 18 + Math.floor(seededRandom(seed++) * 8) },
+      { category: 'hosting', amount: 8000 + Math.floor(seededRandom(seed++) * 3000), description: `Vercel + Supabase hosting`, day: 1 },
+      { category: 'hosting', amount: 2000 + Math.floor(seededRandom(seed++) * 1000), description: 'Domain + SSL certifikati', day: 1 },
+      { category: 'marketing', amount: 12000 + Math.floor(seededRandom(seed++) * 8000), description: 'Instagram i Google reklame', day: 3 },
+      { category: 'marketing', amount: 3000 + Math.floor(seededRandom(seed++) * 4000), description: 'Saradnja sa influenserima', day: 15 + Math.floor(seededRandom(seed++) * 5) },
+      { category: 'salaries', amount: 120000 + Math.floor(seededRandom(seed++) * 20000), description: 'Plate tima', day: 1 },
+      { category: 'software', amount: 5000 + Math.floor(seededRandom(seed++) * 2000), description: 'Licence (Figma, GitHub, Slack)', day: 5 },
+      { category: 'office', amount: 15000, description: 'Zakup kancelarije', day: 1 },
+      { category: 'legal', amount: 5000 + Math.floor(seededRandom(seed++) * 5000), description: seededRandom(seed++) > 0.5 ? 'Mesečno računovodstvo' : 'Pravni konsultant', day: 10 + Math.floor(seededRandom(seed++) * 10) },
+      { category: 'other', amount: 2000 + Math.floor(seededRandom(seed++) * 3000), description: seededRandom(seed++) > 0.5 ? 'Teambuilding' : 'Konferencija / edukacija', day: 18 + Math.floor(seededRandom(seed++) * 8) },
     ]
 
     for (const inc of monthlyIncome) {
@@ -858,7 +877,37 @@ export async function populateAdminDemoData(
 
   // Check if coupons table has current_uses column
   const couponInsertData = couponsToInsert.map(({ current_uses, ...rest }) => rest)
-  await supabase.from('coupons').insert(couponInsertData)
+  const { data: insertedCoupons } = await supabase.from('coupons').insert(couponInsertData).select('id, code, discount_type, discount_value')
+
+  // =============================================
+  // INSERT PAYMENTS (with ~20% coupon-linked)
+  // =============================================
+  if (insertedCoupons?.length) {
+    const activeCoupons = insertedCoupons.filter((_, i) => couponsToInsert[i]?.current_uses !== undefined && DEMO_COUPONS[i]?.valid_days > 0)
+    let couponIdx = 0
+    for (let i = 0; i < paymentsToInsert.length; i++) {
+      // ~20% of payments get a coupon
+      if (seededRandom(seed++) < 0.20 && activeCoupons.length > 0) {
+        const coupon = activeCoupons[couponIdx % activeCoupons.length]
+        couponIdx++
+        const originalAmount = paymentsToInsert[i].amount
+        let discounted = originalAmount
+        if (coupon.discount_type === 'percentage') {
+          discounted = Math.round(originalAmount * (1 - coupon.discount_value / 100))
+        } else {
+          discounted = Math.max(0, originalAmount - coupon.discount_value)
+        }
+        paymentsToInsert[i].coupon_id = coupon.id
+        paymentsToInsert[i].original_amount = originalAmount
+        paymentsToInsert[i].amount = discounted
+        paymentsToInsert[i].notes = `Kupon ${coupon.code} primenjen`
+      }
+    }
+  }
+
+  if (paymentsToInsert.length > 0) {
+    await supabase.from('payments').insert(paymentsToInsert)
+  }
 
   // =============================================
   // AUDIT LOG (is_demo=true)
@@ -892,7 +941,7 @@ export async function populateAdminDemoData(
     { action: 'login', entity_type: 'user', entity_name: 'demo-admin@dragica.local', details: { ip: '188.2.xx.xx' } },
     { action: 'login', entity_type: 'user', entity_name: 'demo-admin@dragica.local', details: { ip: '188.2.xx.xx' } },
     { action: 'login', entity_type: 'user', entity_name: 'demo-admin@dragica.local', details: { ip: '93.87.xx.xx' } },
-    { action: 'view', entity_type: 'salon', entity_name: 'Dragica Demo Salon', details: { action: 'god_mode' } },
+    { action: 'view', entity_type: 'salon', entity_name: 'Nails Salon', details: { action: 'god_mode' } },
     { action: 'view', entity_type: 'salon', entity_name: 'Bella Nails Studio', details: { action: 'god_mode' } },
     { action: 'update', entity_type: 'user', entity_name: 'demo-admin@dragica.local', details: { field: 'password', note: 'Promenjena lozinka' } },
     { action: 'create', entity_type: 'salon', entity_name: 'Elite Beauty Salon', details: { plan: 'Mesečni', city: 'Beograd' } },
@@ -939,7 +988,7 @@ export async function populateAdminDemoData(
     { tenant_id: demoTenants[0]?.id, title: 'Bella Nails - proveriti integraciju', description: 'Klijent prijavio problem sa online zakazivanjem.', days: -5, completed: true },
     { tenant_id: demoTenants[1]?.id, title: 'Glamour Studio - zakazati demo', description: 'Zainteresovani za premium features. Zakazati online demo.', days: 2, completed: false },
     { tenant_id: demoTenants[5]?.id, title: 'Lux Nails - upgrade na Godišnji', description: 'Razgovarati o prelasku na godišnji plan sa popustom.', days: 5, completed: false },
-    { tenant_id: mainDemoTenantId, title: 'Dragica Demo - ažurirati demo podatke', description: 'Proveriti da li su demo podaci ažurni za prezentacije.', days: -7, completed: true },
+    { tenant_id: mainDemoTenantId, title: 'Nails Salon - ažurirati demo podatke', description: 'Proveriti da li su demo podaci ažurni za prezentacije.', days: -7, completed: true },
   ]
 
   const remindersToInsert = reminders
@@ -1317,6 +1366,110 @@ export async function populateAdminDemoData(
     totalContactHistory = contactsToInsert.length
   }
 
+  // =============================================
+  // MESSAGE LOG (WA/Viber messages sent to salons)
+  // =============================================
+  // Fetch existing templates (created via migration, not demo-flagged)
+  const { data: templates } = await supabase
+    .from('admin_message_templates')
+    .select('id, trigger_type, channel, name, message_body')
+
+  let totalMessages = 0
+
+  if (templates?.length && demoTenants.length) {
+    const messageLog: Array<{
+      tenant_id: string
+      template_id: string
+      channel: string
+      trigger_type: string
+      phone: string
+      message_text: string
+      status: string
+      error_message: string | null
+      is_demo: boolean
+      created_at: string
+    }> = []
+
+    // Message scenarios per salon — realistic communication pattern
+    const MESSAGE_SCENARIOS: Array<{
+      salonIndex: number
+      trigger: string
+      channel: string
+      daysAgo: number
+      status: 'sent' | 'failed'
+      errorMsg?: string
+    }> = [
+      // Welcome messages for newer salons
+      { salonIndex: 2, trigger: 'welcome', channel: 'whatsapp', daysAgo: 85, status: 'sent' },
+      { salonIndex: 3, trigger: 'welcome', channel: 'whatsapp', daysAgo: 55, status: 'sent' },
+      { salonIndex: 6, trigger: 'welcome', channel: 'viber', daysAgo: 20, status: 'sent' },
+      { salonIndex: 10, trigger: 'welcome', channel: 'whatsapp', daysAgo: 5, status: 'sent' },
+      { salonIndex: 11, trigger: 'welcome', channel: 'viber', daysAgo: 3, status: 'sent' },
+
+      // Subscription expiring warnings
+      { salonIndex: 4, trigger: 'subscription_expiring', channel: 'whatsapp', daysAgo: 2, status: 'sent' },
+      { salonIndex: 5, trigger: 'subscription_expiring', channel: 'viber', daysAgo: 1, status: 'sent' },
+      { salonIndex: 7, trigger: 'subscription_expiring', channel: 'whatsapp', daysAgo: 18, status: 'sent' },
+      { salonIndex: 8, trigger: 'subscription_expiring', channel: 'viber', daysAgo: 48, status: 'sent' },
+      { salonIndex: 9, trigger: 'subscription_expiring', channel: 'whatsapp', daysAgo: 5, status: 'sent' },
+
+      // Inactivity nudges
+      { salonIndex: 7, trigger: 'inactivity', channel: 'whatsapp', daysAgo: 25, status: 'sent' },
+      { salonIndex: 8, trigger: 'inactivity', channel: 'viber', daysAgo: 30, status: 'sent' },
+      { salonIndex: 11, trigger: 'inactivity', channel: 'viber', daysAgo: 10, status: 'failed', errorMsg: 'Broj nije registrovan na Viber' },
+
+      // Follow-up messages (sent after initial)
+      { salonIndex: 0, trigger: 'subscription_expiring', channel: 'whatsapp', daysAgo: 40, status: 'sent' },
+      { salonIndex: 1, trigger: 'subscription_expiring', channel: 'viber', daysAgo: 35, status: 'sent' },
+      { salonIndex: 0, trigger: 'inactivity', channel: 'whatsapp', daysAgo: 60, status: 'sent' },
+      { salonIndex: 3, trigger: 'inactivity', channel: 'whatsapp', daysAgo: 15, status: 'sent' },
+      { salonIndex: 5, trigger: 'inactivity', channel: 'viber', daysAgo: 22, status: 'failed', errorMsg: 'Timeout pri slanju' },
+
+      // Recent activity burst
+      { salonIndex: 1, trigger: 'welcome', channel: 'viber', daysAgo: 115, status: 'sent' },
+      { salonIndex: 4, trigger: 'inactivity', channel: 'whatsapp', daysAgo: 45, status: 'sent' },
+      { salonIndex: 6, trigger: 'subscription_expiring', channel: 'viber', daysAgo: 8, status: 'sent' },
+      { salonIndex: 2, trigger: 'subscription_expiring', channel: 'whatsapp', daysAgo: 12, status: 'sent' },
+      { salonIndex: 9, trigger: 'welcome', channel: 'whatsapp', daysAgo: 65, status: 'sent' },
+    ]
+
+    for (const scenario of MESSAGE_SCENARIOS) {
+      if (scenario.salonIndex >= demoTenants.length) continue
+      const tenant = demoTenants[scenario.salonIndex]
+      const template = templates.find(t => t.trigger_type === scenario.trigger && t.channel === scenario.channel)
+      if (!template) continue
+
+      const salon = DEMO_SALONS[scenario.salonIndex]
+      const sentAt = new Date(now)
+      sentAt.setDate(sentAt.getDate() - scenario.daysAgo)
+      sentAt.setHours(9 + Math.floor(seededRandom(seed++) * 9), Math.floor(seededRandom(seed++) * 60))
+
+      // Replace template placeholders with salon data
+      let messageText = template.message_body
+        .replace('{salon_name}', salon.name)
+        .replace('{days_left}', String(3 + Math.floor(seededRandom(seed++) * 10)))
+        .replace('{expiry_date}', new Date(sentAt.getTime() + 7 * 86400000).toLocaleDateString('sr-RS'))
+
+      messageLog.push({
+        tenant_id: tenant.id,
+        template_id: template.id,
+        channel: scenario.channel,
+        trigger_type: scenario.trigger,
+        phone: salon.phone,
+        message_text: messageText,
+        status: scenario.status,
+        error_message: scenario.errorMsg || null,
+        is_demo: true,
+        created_at: sentAt.toISOString(),
+      })
+    }
+
+    if (messageLog.length > 0) {
+      await supabase.from('admin_message_log').insert(messageLog)
+      totalMessages = messageLog.length
+    }
+  }
+
   return {
     salons: demoTenants.length,
     plans: plans.length,
@@ -1331,5 +1484,6 @@ export async function populateAdminDemoData(
     salonCustomers: totalSalonCustomers,
     salonBookings: totalSalonBookings,
     contactHistory: totalContactHistory,
+    messages: totalMessages,
   }
 }
